@@ -1,0 +1,23 @@
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+//    dependencies {
+////        classpath 'com.android.tools.build:gradle:8.6.1'
+//        classpath 'com.google.gms:google-services:4.4.4'
+//        classpath 'com.google.firebase:firebase-crashlytics-gradle:3.0.6'
+//    }
+}
+
+rootProject.buildDir = "../build"
+subprojects {
+    project.buildDir = "${rootProject.buildDir}/${project.name}"
+}
+subprojects {
+    project.evaluationDependsOn(":app")
+}
+
+tasks.register("clean", Delete) {
+    delete rootProject.buildDir
+}
