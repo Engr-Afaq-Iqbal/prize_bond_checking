@@ -122,10 +122,10 @@ class SellBondScreen extends StatelessWidget {
                 onPressed: () {
                   final price = double.tryParse(_priceCtrl.text) ?? 0;
                   controller.addListing(
-                    _bondNumberCtrl.text,
-                    _selectedDenom.value,
-                    price,
-                    _locationCtrl.text,
+                    bondNumber: _bondNumberCtrl.text,
+                    denomination: _selectedDenom.value,
+                    price: price,
+                    city: _locationCtrl.text,
                   );
                 },
                 child:

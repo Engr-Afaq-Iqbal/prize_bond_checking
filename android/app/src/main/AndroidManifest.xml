@@ -1,4 +1,21 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-feature
+        android:name="android.hardware.camera"
+        android:required="false" />
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <!--  Network state (offline detection)  -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <!--  Push notifications (Android 13+)  -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!--  Read/Write files (for saving PDFs) - Android 9 and below  -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
+    <!--  Camera (for bond scanner feature)  -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <!--  Vibrate (for notification alerts)  -->
+    <uses-permission android:name="android.permission.VIBRATE"/>
+    <!--  Wake lock (for background notification processing)  -->
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <application
         android:label="Prize Bond App"
         android:name="${applicationName}"
@@ -43,3 +60,65 @@
         </intent>
     </queries>
 </manifest>
+
+
+<!--&lt;!&ndash;    This XML file does not appear to have any style information associated with it. The document tree is shown below.&ndash;&gt;-->
+<!--    &lt;!&ndash;  android/app/src/main/AndroidManifest.xml  &ndash;&gt;-->
+<!--    &lt;!&ndash;  UPDATED: Added all required permissions for Firebase, notifications, and file access  &ndash;&gt;-->
+<!--<manifest xmlns:tools="http://schemas.android.com/tools"-->
+<!--    xmlns:android="http://schemas.android.com/apk/res/android">-->
+<!--    &lt;!&ndash;  ── PERMISSIONS ────────────────────────────────────────────────────  &ndash;&gt;-->
+<!--    &lt;!&ndash;  Internet access (Firebase, downloads)  &ndash;&gt;-->
+<!--    <uses-feature-->
+<!--        android:name="android.hardware.camera"-->
+<!--        android:required="false" />-->
+<!--    <uses-permission android:name="android.permission.INTERNET"/>-->
+<!--    &lt;!&ndash;  Network state (offline detection)  &ndash;&gt;-->
+<!--    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>-->
+<!--    &lt;!&ndash;  Push notifications (Android 13+)  &ndash;&gt;-->
+<!--    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>-->
+<!--    &lt;!&ndash;  Read/Write files (for saving PDFs) - Android 9 and below  &ndash;&gt;-->
+<!--    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32"-->
+<!--        tools:targetApi="donut" />-->
+<!--    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28"-->
+<!--        tools:targetApi="donut" />-->
+<!--    &lt;!&ndash;  Camera (for bond scanner feature)  &ndash;&gt;-->
+<!--    <uses-permission android:name="android.permission.CAMERA"/>-->
+<!--    &lt;!&ndash;  Vibrate (for notification alerts)  &ndash;&gt;-->
+<!--    <uses-permission android:name="android.permission.VIBRATE"/>-->
+<!--    &lt;!&ndash;  Wake lock (for background notification processing)  &ndash;&gt;-->
+<!--    <uses-permission android:name="android.permission.WAKE_LOCK"/>-->
+<!--    <application android:label="Prize Bond App" android:name="${applicationName}" android:icon="@mipmap/ic_launcher" android:requestLegacyExternalStorage="true">-->
+<!--        <activity android:name=".MainActivity" android:exported="true" android:launchMode="singleTop" android:taskAffinity="" android:theme="@style/LaunchTheme" android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode" android:hardwareAccelerated="true" android:windowSoftInputMode="adjustResize">-->
+<!--            <meta-data android:name="io.flutter.embedding.android.NormalTheme" android:resource="@style/NormalTheme"/>-->
+<!--            <intent-filter>-->
+<!--                <action android:name="android.intent.action.MAIN"/>-->
+<!--                <category android:name="android.intent.category.LAUNCHER"/>-->
+<!--            </intent-filter>-->
+<!--        </activity>-->
+<!--        &lt;!&ndash;  FCM Service for push notifications  &ndash;&gt;-->
+<!--        <service android:name="com.google.firebase.messaging.FirebaseMessagingService" android:exported="false">-->
+<!--            <intent-filter>-->
+<!--                <action android:name="com.google.firebase.MESSAGING_EVENT"/>-->
+<!--            </intent-filter>-->
+<!--        </service>-->
+<!--        &lt;!&ndash;  Notification Channel metadata for FCM  &ndash;&gt;-->
+<!--        <meta-data android:name="com.google.firebase.messaging.default_notification_channel_id" android:value="prize_bond_channel"/>-->
+<!--        &lt;!&ndash;  Notification icon for FCM  &ndash;&gt;-->
+<!--        <meta-data android:name="com.google.firebase.messaging.default_notification_icon" android:resource="@mipmap/ic_launcher"/>-->
+<!--        &lt;!&ndash;  Notification color  &ndash;&gt;-->
+<!--        <meta-data android:name="com.google.firebase.messaging.default_notification_color" android:resource="@color/notification_color"/>-->
+<!--        <meta-data android:name="flutterEmbedding" android:value="2"/>-->
+<!--    </application>-->
+<!--    <queries>-->
+<!--        <intent>-->
+<!--            <action android:name="android.intent.action.PROCESS_TEXT"/>-->
+<!--            <data android:mimeType="text/plain"/>-->
+<!--        </intent>-->
+<!--        &lt;!&ndash;  Required for opening PDF files  &ndash;&gt;-->
+<!--        <intent>-->
+<!--            <action android:name="android.intent.action.VIEW"/>-->
+<!--            <data android:mimeType="application/pdf"/>-->
+<!--        </intent>-->
+<!--    </queries>-->
+<!--</manifest>-->
