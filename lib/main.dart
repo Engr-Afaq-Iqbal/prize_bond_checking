@@ -8,12 +8,11 @@ import 'Controllers/AppController/app_controller.dart';
 import 'Services/notification_service.dart';
 import 'Services/offline_cache_service.dart';
 import 'View/PrizeBondApp/prize_bond_app.dart';
-import 'firebase_options.dart';
 
 void main() async {
-  // WidgetsFlutterBinding.ensureInitialized();
-  // await Firebase.initializeApp();
-  // await GetStorage.init();
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp();
+  await GetStorage.init();
   AppController().initializeController();
   //
   // SystemChrome.setPreferredOrientations([
@@ -21,12 +20,12 @@ void main() async {
   //   DeviceOrientation.portraitDown,
   // ]);
 
-  WidgetsFlutterBinding.ensureInitialized();
+  // WidgetsFlutterBinding.ensureInitialized();
 
   // ── 1. Firebase ────────────────────────────────────────────────────────────
   await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+      // options: DefaultFirebaseOptions.currentPlatform,
+      );
 
   // ── 2. Local Storage (GetStorage for simple key-value) ─────────────────────
   await GetStorage.init();

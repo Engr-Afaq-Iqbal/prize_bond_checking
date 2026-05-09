@@ -8,8 +8,8 @@ import 'package:prize_bond_app/View/marketplace/sell_bond_screen.dart';
 import '../../Theme/app_theme.dart';
 import '../../Utils/common_widgets.dart';
 import '../../Utils/mock_data.dart';
-import '../../controllers/marketplace_controller.dart';
-import '../../models/marketplace_model.dart';
+import '../../Controllers/marketplace_controller.dart';
+import '../../Models/market_listing_model.dart';
 import '../settings/settings_screen.dart';
 
 class MarketplaceScreen extends StatelessWidget {
@@ -170,7 +170,7 @@ class MarketplaceScreen extends StatelessWidget {
 
 // ── Marketplace Card ───────────────────────────────────────────────────────────
 class _MarketCard extends StatelessWidget {
-  final MarketplaceModel listing;
+  final MarketListingModel listing;
   final VoidCallback onContact;
 
   const _MarketCard({required this.listing, required this.onContact});
@@ -226,7 +226,7 @@ class _MarketCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  '${listing.sellerName}, ${listing.location}',
+                  '${listing.sellerName}, ${listing.sellerCity}',
                   style: AppTextStyles.bodySecondary,
                 ),
               ],

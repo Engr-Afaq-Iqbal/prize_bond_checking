@@ -103,7 +103,6 @@ import 'package:logger/logger.dart';
 import '../Models/market_listing_model.dart';
 import '../Services/connectivity_service.dart';
 import '../View/SignInPage/sign_in_page.dart';
-import '../models/marketplace_model.dart';
 
 class MarketplaceController extends GetxController {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -112,11 +111,10 @@ class MarketplaceController extends GetxController {
   final RxList<MarketListingModel> listings = <MarketListingModel>[].obs;
   final RxBool isLoading = false.obs;
   final RxInt filterDenomination = 0.obs;
-  // Get filtered listings based on denomination filter
-  final RxList<MarketplaceModel> allListings = <MarketplaceModel>[].obs;
-  List<MarketplaceModel> get filteredListings {
-    if (filterDenomination.value == 0) return allListings; // Show all
-    return allListings
+
+  List<MarketListingModel> get filteredListings {
+    if (filterDenomination.value == 0) return listings;
+    return listings
         .where((l) => l.denomination == filterDenomination.value)
         .toList();
   }
