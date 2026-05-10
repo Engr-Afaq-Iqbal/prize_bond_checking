@@ -14,6 +14,7 @@ class SellBondScreen extends StatelessWidget {
   final TextEditingController _bondNumberCtrl = TextEditingController();
   final TextEditingController _priceCtrl = TextEditingController();
   final TextEditingController _locationCtrl = TextEditingController();
+  final TextEditingController _phoneCtrl = TextEditingController();
   final RxInt _selectedDenom = 750.obs;
 
   @override
@@ -113,6 +114,23 @@ class SellBondScreen extends StatelessWidget {
                 hintText: 'e.g., Karachi',
               ),
             ),
+            const SizedBox(height: 16),
+
+            // ── Phone / WhatsApp ──────────────────────────────────────────────
+            _fieldLabel('WhatsApp / Phone Number *'),
+            TextField(
+              controller: _phoneCtrl,
+              keyboardType: TextInputType.phone,
+              decoration: const InputDecoration(
+                hintText: 'e.g., 03001234567',
+                prefixIcon: Icon(Icons.phone),
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Buyers will contact you directly on WhatsApp.',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
             const SizedBox(height: 32),
 
             // ── Submit Button ─────────────────────────────────────────────────
@@ -126,6 +144,7 @@ class SellBondScreen extends StatelessWidget {
                     denomination: _selectedDenom.value,
                     price: price,
                     city: _locationCtrl.text,
+                    phone: _phoneCtrl.text,
                   );
                 },
                 child:

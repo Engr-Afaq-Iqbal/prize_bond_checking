@@ -4,14 +4,15 @@
 
 class MarketListingModel {
   final String id;
-  final String sellerUid;       // Firebase Auth UID of seller
-  final String sellerName;      // Display name
-  final String sellerCity;      // Location
+  final String sellerUid;
+  final String sellerName;
+  final String sellerCity;
   final String bondNumber;
   final int denomination;
   final double askingPrice;
   final DateTime listedAt;
-  final bool isActive;          // false = sold or removed
+  final bool isActive;
+  final String sellerPhone; // WhatsApp / phone number for direct contact
 
   MarketListingModel({
     required this.id,
@@ -23,9 +24,11 @@ class MarketListingModel {
     required this.askingPrice,
     required this.listedAt,
     this.isActive = true,
+    this.sellerPhone = '',
   });
 
-  factory MarketListingModel.fromFirestore(Map<String, dynamic> data, String docId) {
+  factory MarketListingModel.fromFirestore(
+      Map<String, dynamic> data, String docId) {
     return MarketListingModel(
       id: docId,
       sellerUid: data['sellerUid'] ?? '',
@@ -36,6 +39,7 @@ class MarketListingModel {
       askingPrice: (data['askingPrice'] as num).toDouble(),
       listedAt: (data['listedAt'] as dynamic).toDate(),
       isActive: data['isActive'] ?? true,
+      sellerPhone: data['sellerPhone'] ?? '',
     );
   }
 
@@ -49,6 +53,7 @@ class MarketListingModel {
       'askingPrice': askingPrice,
       'listedAt': listedAt,
       'isActive': isActive,
+      'sellerPhone': sellerPhone,
     };
   }
 }

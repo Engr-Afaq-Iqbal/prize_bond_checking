@@ -236,13 +236,22 @@ class _MarketCard extends StatelessWidget {
             // Contact Seller button
             SizedBox(
               width: double.infinity,
-              child: OutlinedButton.icon(
+              child: ElevatedButton.icon(
                 onPressed: onContact,
-                icon: const Icon(Icons.chat_bubble_outline, size: 18),
-                label: const Text('Contact Seller'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.primary,
-                  side: const BorderSide(color: AppColors.primary),
+                icon: Icon(
+                  listing.sellerPhone.isNotEmpty
+                      ? Icons.chat
+                      : Icons.chat_bubble_outline,
+                  size: 18,
+                ),
+                label: Text(listing.sellerPhone.isNotEmpty
+                    ? 'Contact on WhatsApp'
+                    : 'Contact Seller'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: listing.sellerPhone.isNotEmpty
+                      ? const Color(0xFF25D366)
+                      : AppColors.primary,
+                  foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10),
                   ),

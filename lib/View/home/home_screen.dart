@@ -1,6 +1,5 @@
-// lib/screens/home/home_screen.dart
-// Main Home screen - first tab users see
-// Shows bond checker, stats, and latest draw results
+// lib/View/home/home_screen.dart
+// Home screen — bond checker backed by real Firebase draw data
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -9,44 +8,54 @@ import 'package:intl/intl.dart';
 import '../../Theme/app_theme.dart';
 import '../../Utils/common_widgets.dart';
 import '../../Utils/mock_data.dart';
+import '../../Controllers/DrawControllers/draw_controller.dart';
 import '../../controllers/home_controller.dart';
 import '../../controllers/nav_controller.dart';
-import '../../models/draw_result_model.dart';
 import '../scanner/scanner_screen.dart';
 import '../settings/settings_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   HomeScreen({super.key});
 
-  // Text controller for bond number input
   final TextEditingController _bondInputController = TextEditingController();
 
   @override
   Widget build(BuildContext context) {
-    // GetX controller for this screen
     final HomeController controller = Get.put(HomeController());
+    final DrawController draw = Get.find<DrawController>();
 
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
         child: Column(
           children: [
-            // ── HEADER ────────────────────────────────────────────────────────
+            // ── HEADER ───────────────────────────────────────────────────────
             AppHeader(
               title: 'Prize Bond Checking',
               onSettingsTap: () => Get.to(() => SettingsScreen()),
             ),
 
-            // ── SEARCH BAR ────────────────────────────────────────────────────
+            // ── SEARCH BAR ───────────────────────────────────────────────────
             Container(
               color: AppColors.headerBackground,
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
               child: TextField(
                 style: const TextStyle(color: Colors.white),
+                keyboardType: TextInputType.number,
+                onChanged: (val) {
+                  controller.bondNumber.value = val;
+                  _bondInputController.text = val;
+                },
                 decoration: InputDecoration(
                   hintText: 'Search Prize Bond Numbers...',
                   hintStyle: const TextStyle(color: Colors.white54),
                   prefixIcon: const Icon(Icons.search, color: Colors.white54),
+                  suffixIcon: IconButton(
+                    icon: const Icon(Icons.check_circle_outline,
+                        color: Colors.white70),
+                    tooltip: 'Check',
+                    onPressed: controller.checkBond,
+                  ),
                   filled: true,
                   fillColor: Colors.white.withOpacity(0.1),
                   border: OutlineInputBorder(
@@ -61,20 +70,21 @@ class HomeScreen extends StatelessWidget {
               ),
             ),
 
-            // ── SCROLLABLE CONTENT ────────────────────────────────────────────
+            // ── SCROLLABLE CONTENT ───────────────────────────────────────────
             Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // ── STATS ROW (Total Bonds & Next Draw) ──────────────────
+                    // ── STATS ROW ────────────────────────────────────────────
                     Obx(() => Row(
                           children: [
                             Expanded(
                               child: StatCard(
                                 label: 'Total Bonds',
-                                value: controller.totalBonds.value.toString(),
+                                value:
+                                    controller.totalBonds.value.toString(),
                                 backgroundColor: const Color(0xFFFFF9C4),
                               ),
                             ),
@@ -107,28 +117,33 @@ class HomeScreen extends StatelessWidget {
                                   padding: const EdgeInsets.symmetric(
                                       horizontal: 16, vertical: 4),
                                   decoration: BoxDecoration(
-                                    border: Border.all(color: AppColors.border),
-                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                        color: AppColors.border),
+                                    borderRadius:
+                                        BorderRadius.circular(12),
                                   ),
                                   child: DropdownButtonHideUnderline(
                                     child: DropdownButton<int>(
-                                      value:
-                                          controller.selectedDenomination.value,
+                                      value: controller
+                                          .selectedDenomination.value,
                                       isExpanded: true,
                                       icon: const Icon(Icons.expand_more,
                                           color: AppColors.textSecondary),
                                       items: MockData.denominations
                                           .map((d) => DropdownMenuItem(
                                                 value: d,
-                                                child: Text('Rs. $d Prize Bond',
-                                                    style: AppTextStyles.body),
+                                                child: Text(
+                                                    'Rs. $d Prize Bond',
+                                                    style:
+                                                        AppTextStyles.body),
                                               ))
                                           .toList(),
                                       onChanged: (val) {
                                         if (val != null) {
-                                          controller
-                                              .selectedDenomination.value = val;
-                                          controller.hasResult.value = false;
+                                          controller.selectedDenomination
+                                              .value = val;
+                                          draw.hasCheckResult.value =
+                                              false;
                                         }
                                       },
                                     ),
@@ -154,10 +169,10 @@ class HomeScreen extends StatelessWidget {
                             Obx(() => SizedBox(
                                   width: double.infinity,
                                   child: ElevatedButton(
-                                    onPressed: controller.isChecking.value
+                                    onPressed: draw.isChecking.value
                                         ? null
                                         : controller.checkBond,
-                                    child: controller.isChecking.value
+                                    child: draw.isChecking.value
                                         ? const SizedBox(
                                             height: 20,
                                             width: 20,
@@ -168,16 +183,19 @@ class HomeScreen extends StatelessWidget {
                                         : const Text('Check Result',
                                             style: TextStyle(
                                                 fontSize: 16,
-                                                fontWeight: FontWeight.w600)),
+                                                fontWeight:
+                                                    FontWeight.w600)),
                                   ),
                                 )),
 
                             // ── RESULT DISPLAY ────────────────────────────────
-                            Obx(() => controller.hasResult.value
+                            Obx(() => draw.hasCheckResult.value
                                 ? _buildResultCard(
-                                    controller.isWinner.value,
-                                    controller.bondNumber.value,
-                                    controller.selectedDenomination.value,
+                                    draw.isWinner.value,
+                                    draw.checkedBondNumber.value,
+                                    draw.selectedDenomination.value,
+                                    draw.winningDraw?.drawNumber,
+                                    draw.winningDraw?.city,
                                   )
                                 : const SizedBox.shrink()),
                           ],
@@ -191,17 +209,32 @@ class HomeScreen extends StatelessWidget {
                       title: 'Latest Draw Results',
                       actionLabel: 'View All',
                       onAction: () {
-                        // Switch to schedule tab
                         Get.find<NavController>().changePage(3);
                       },
                     ),
                     const SizedBox(height: 12),
 
-                    Obx(() => Column(
-                          children: controller.latestDraws
-                              .map((draw) => _DrawResultTile(draw: draw))
-                              .toList(),
-                        )),
+                    Obx(() {
+                      if (draw.isLoading.value) {
+                        return const Center(
+                            child: CircularProgressIndicator());
+                      }
+                      final latest = draw.draws.take(5).toList();
+                      if (latest.isEmpty) {
+                        return const Text('No draw results yet.',
+                            style: AppTextStyles.bodySecondary);
+                      }
+                      return Column(
+                        children: latest
+                            .map((d) => _DrawResultTile(
+                                  denomination: d.denomination,
+                                  city: d.city,
+                                  date: d.drawDate,
+                                  drawNumber: d.drawNumber,
+                                ))
+                            .toList(),
+                      );
+                    }),
                   ],
                 ),
               ),
@@ -210,12 +243,11 @@ class HomeScreen extends StatelessWidget {
         ),
       ),
 
-      // ── SCANNER FAB (center bottom button) ─────────────────────────────────
+      // ── SCANNER FAB ──────────────────────────────────────────────────────────
       floatingActionButton: FloatingActionButton(
         backgroundColor: AppColors.primary,
         onPressed: () async {
-          // Open scanner screen and get back the scanned number
-          final result = await Get.to(() => ScannerScreen());
+          final result = await Get.to(() => const ScannerScreen());
           if (result != null && result is String) {
             controller.fillFromScanner(result);
             _bondInputController.text = result;
@@ -226,8 +258,13 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  // Build the result card shown after checking
-  Widget _buildResultCard(bool isWinner, String number, int denomination) {
+  Widget _buildResultCard(
+    bool isWinner,
+    String number,
+    int denomination,
+    int? drawNumber,
+    String? city,
+  ) {
     return Container(
       margin: const EdgeInsets.only(top: 16),
       padding: const EdgeInsets.all(16),
@@ -257,13 +294,20 @@ class HomeScreen extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
-                    color: isWinner ? AppColors.winning : AppColors.notWinning,
+                    color:
+                        isWinner ? AppColors.winning : AppColors.notWinning,
                   ),
                 ),
                 Text(
                   'Bond #$number (Rs. $denomination)',
                   style: AppTextStyles.bodySecondary,
                 ),
+                if (isWinner && drawNumber != null && city != null)
+                  Text(
+                    'Draw #$drawNumber · $city',
+                    style: const TextStyle(
+                        fontSize: 12, color: AppColors.textSecondary),
+                  ),
               ],
             ),
           ),
@@ -273,18 +317,27 @@ class HomeScreen extends StatelessWidget {
   }
 }
 
-// ── Draw Result List Tile ──────────────────────────────────────────────────────
+// ── Draw Result Tile ──────────────────────────────────────────────────────────
 class _DrawResultTile extends StatelessWidget {
-  final DrawResultModel draw;
+  final int denomination;
+  final String city;
+  final DateTime date;
+  final int drawNumber;
 
-  const _DrawResultTile({required this.draw});
+  const _DrawResultTile({
+    required this.denomination,
+    required this.city,
+    required this.date,
+    required this.drawNumber,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         leading: Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
@@ -293,14 +346,14 @@ class _DrawResultTile extends StatelessWidget {
           ),
           child: const Icon(Icons.emoji_events, color: AppColors.primary),
         ),
-        title: Text('Rs. ${draw.denomination} Draw',
+        title: Text('Rs. $denomination Draw #$drawNumber',
             style: AppTextStyles.heading3),
         subtitle: Text(
-          '${draw.city} · ${DateFormat('yyyy-MM-dd').format(draw.drawDate)}',
+          '$city · ${DateFormat('yyyy-MM-dd').format(date)}',
           style: AppTextStyles.caption,
         ),
-        trailing:
-            const Icon(Icons.download_outlined, color: AppColors.textSecondary),
+        trailing: const Icon(Icons.download_outlined,
+            color: AppColors.textSecondary),
       ),
     );
   }

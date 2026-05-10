@@ -48,6 +48,13 @@ dependencies:
   # Permission handling
   permission_handler: ^11.3.1
 
+  # Camera & OCR for real bond scanner
+  camera: ^0.11.0+2
+  google_mlkit_text_recognition: ^0.14.0
+
+  # URL launcher (WhatsApp contact in marketplace)
+  url_launcher: ^6.3.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

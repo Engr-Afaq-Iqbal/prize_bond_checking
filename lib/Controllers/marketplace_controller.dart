@@ -99,6 +99,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:logger/logger.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../Models/market_listing_model.dart';
 import '../Services/connectivity_service.dart';
@@ -186,6 +187,7 @@ class MarketplaceController extends GetxController {
     required int denomination,
     required double price,
     required String city,
+    String phone = '',
   }) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
@@ -222,6 +224,7 @@ class MarketplaceController extends GetxController {
         denomination: denomination,
         askingPrice: price,
         listedAt: DateTime.now(),
+        sellerPhone: phone.trim(),
       );
 
       await _firestore.collection('marketplace').add(listing.toFirestore());
@@ -250,17 +253,62 @@ class MarketplaceController extends GetxController {
         children: [
           Text('Seller: ${listing.sellerName}'),
           Text('Location: ${listing.sellerCity}'),
-          const SizedBox(height: 12),
-          const Text(
-            'In a real app, this would open WhatsApp or an in-app chat with the seller.',
-            style: TextStyle(color: Colors.grey, fontSize: 13),
-          ),
+          if (listing.sellerPhone.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text('Phone: ${listing.sellerPhone}'),
+          ],
         ],
       ),
       actions: [
-        TextButton(onPressed: () => Get.back(), child: const Text('OK')),
+        TextButton(onPressed: () => Get.back(), child: const Text('Cancel')),
+        if (listing.sellerPhone.isNotEmpty) ...[
+          TextButton(
+            onPressed: () {
+              Get.back();
+              _openWhatsApp(listing.sellerPhone, listing);
+            },
+            child: const Text('WhatsApp'),
+          ),
+          TextButton(
+            onPressed: () {
+              Get.back();
+              _callSeller(listing.sellerPhone);
+            },
+            child: const Text('Call'),
+          ),
+        ],
       ],
     ));
+  }
+
+  Future<void> _openWhatsApp(String phone, MarketListingModel listing) async {
+    // Sanitize phone: remove spaces, dashes, parentheses
+    final cleaned = phone.replaceAll(RegExp(r'[\s\-()]'), '');
+    // Add Pakistan country code if missing
+    final international =
+        cleaned.startsWith('+') ? cleaned : '+92${cleaned.replaceFirst(RegExp(r'^0'), '')}';
+
+    final message = Uri.encodeComponent(
+      'Hi ${listing.sellerName}, I am interested in your Rs. ${listing.denomination} Prize Bond #${listing.bondNumber} listed for Rs. ${listing.askingPrice.toStringAsFixed(0)}.',
+    );
+    final uri = Uri.parse('https://wa.me/$international?text=$message');
+
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else {
+      Get.snackbar('Error', 'WhatsApp is not installed',
+          snackPosition: SnackPosition.BOTTOM);
+    }
+  }
+
+  Future<void> _callSeller(String phone) async {
+    final uri = Uri.parse('tel:$phone');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
+    } else {
+      Get.snackbar('Error', 'Cannot make calls on this device',
+          snackPosition: SnackPosition.BOTTOM);
+    }
   }
 
   // ─── FILTER ────────────────────────────────────────────────────────────────

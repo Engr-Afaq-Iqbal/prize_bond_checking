@@ -28,6 +28,10 @@ class DrawController extends GetxController {
   final RxString errorMessage = ''.obs;
   final RxInt filterDenomination = 0.obs; // 0 = all
   final RxBool isOffline = false.obs;
+  final RxString filterCity = ''.obs;         // '' means all cities
+  DateTime? filterDateFrom;
+  DateTime? filterDateTo;
+  final RxBool hasDateFilter = false.obs;
 
   // PDF download tracking
   final RxMap<String, double> downloadProgress = <String, double>{}.obs;
@@ -97,14 +101,47 @@ class DrawController extends GetxController {
   // ─── FILTERED DRAWS ────────────────────────────────────────────────────────
 
   List<DrawModel> get filteredDraws {
-    if (filterDenomination.value == 0) return draws;
-    return draws
-        .where((d) => d.denomination == filterDenomination.value)
-        .toList();
+    return draws.where((d) {
+      if (filterDenomination.value != 0 &&
+          d.denomination != filterDenomination.value) return false;
+      if (filterCity.value.isNotEmpty &&
+          !d.city.toLowerCase().contains(filterCity.value.toLowerCase()))
+        return false;
+      if (filterDateFrom != null &&
+          d.drawDate.isBefore(filterDateFrom!)) return false;
+      if (filterDateTo != null &&
+          d.drawDate.isAfter(filterDateTo!)) return false;
+      return true;
+    }).toList();
+  }
+
+  // All unique cities from loaded draws
+  List<String> get availableCities {
+    final cities = draws.map((d) => d.city).toSet().toList();
+    cities.sort();
+    return cities;
   }
 
   void setFilter(int denomination) {
     filterDenomination.value = denomination;
+  }
+
+  void setCityFilter(String city) {
+    filterCity.value = city;
+  }
+
+  void setDateFilter(DateTime? from, DateTime? to) {
+    filterDateFrom = from;
+    filterDateTo = to;
+    hasDateFilter.value = from != null || to != null;
+  }
+
+  void clearAllFilters() {
+    filterDenomination.value = 0;
+    filterCity.value = '';
+    filterDateFrom = null;
+    filterDateTo = null;
+    hasDateFilter.value = false;
   }
 
   // ─── BOND CHECK ────────────────────────────────────────────────────────────
