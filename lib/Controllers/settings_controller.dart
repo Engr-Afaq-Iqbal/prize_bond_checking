@@ -5,6 +5,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
+import '../Controllers/AuthControllers/auth_controller.dart';
 import '../Utils/storage_service.dart';
 
 class SettingsController extends GetxController {
@@ -85,7 +86,8 @@ class SettingsController extends GetxController {
     );
   }
 
-  // Logout function (navigate to login screen)
+  // Logout function — delegates to AuthController which signs out Firebase,
+  // clears local storage, and navigates back to SignInPage.
   void logout() {
     Get.dialog(
       AlertDialog(
@@ -96,11 +98,10 @@ class SettingsController extends GetxController {
           TextButton(
             onPressed: () {
               Get.back();
-              // Navigate to login - auth is already handled separately
-              // In your existing auth setup, call your auth controller's logout
-              Get.offAllNamed('/login');
+              Get.find<AuthController>().signOut();
             },
-            child: const Text('Logout'),
+            child: const Text('Logout',
+                style: TextStyle(color: Colors.red)),
           ),
         ],
       ),

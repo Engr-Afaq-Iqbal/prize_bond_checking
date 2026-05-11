@@ -24,7 +24,7 @@ class AppHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+      padding: const EdgeInsets.fromLTRB(20, 25, 20, 30),
       decoration: BoxDecoration(
         color: AppColors.headerBackground,
       ),

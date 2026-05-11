@@ -1,13 +1,18 @@
-// lib/screens/main_screen.dart
-// Main wrapper screen with bottom navigation bar
-// This is the shell that holds all 4 main tabs
+// lib/View/main_screen.dart
+// Root shell for all user-facing tabs.
+//
+// NOTE: There is NO FloatingActionButton here.
+// HomeScreen has its own scanner FAB. Having two FABs in the same route
+// causes the "multiple heroes with the same tag" crash because Flutter
+// animates FABs with a shared Hero tag by default. Each screen that needs
+// a FAB must declare one inside its own Scaffold, not in this shell.
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:prize_bond_app/View/schedule/schedule_screen.dart';
 
 import '../Theme/app_theme.dart';
 import '../controllers/nav_controller.dart';
+import 'Draws/draws_screen.dart';
 import 'home/home_screen.dart';
 import 'marketplace/marketplace_screen.dart';
 import 'my_bonds/my_bonds_screen.dart';
@@ -15,32 +20,32 @@ import 'my_bonds/my_bonds_screen.dart';
 class MainScreen extends StatelessWidget {
   MainScreen({super.key});
 
-  // All 4 main screens - created once and kept alive
+  // All tab screens — created once and kept alive by IndexedStack
   final List<Widget> _screens = [
-    HomeScreen(), // Tab 0: Home
-    MyBondsScreen(), // Tab 1: My Bonds
-    const MarketplaceScreen(), // Tab 2: Marketplace
-    const ScheduleScreen(), // Tab 3: Schedule
+    HomeScreen(),              // Tab 0 — Home (bond checker + scanner FAB)
+    const MyBondsScreen(),     // Tab 1 — My Bonds (auth-gated actions)
+    const MarketplaceScreen(), // Tab 2 — Marketplace (auth-gated actions)
+    const DrawsScreen(),       // Tab 3 — All draw results + PDF download
   ];
 
   @override
   Widget build(BuildContext context) {
-    // Get the navigation controller
-    final NavController navController = Get.put(NavController());
+    final NavController nav = Get.put(NavController());
 
     return Scaffold(
-      // Show the currently selected screen
+      // IndexedStack keeps every screen alive when switching tabs
       body: Obx(() => IndexedStack(
-            // IndexedStack keeps all screens alive (doesn't rebuild on tab switch)
-            index: navController.currentIndex.value,
+            index: nav.currentIndex.value,
             children: _screens,
           )),
 
-      // Bottom navigation bar
       bottomNavigationBar: Obx(
         () => BottomNavigationBar(
-          currentIndex: navController.currentIndex.value,
-          onTap: navController.changePage,
+          currentIndex: nav.currentIndex.value,
+          onTap: nav.changePage,
+          selectedItemColor: AppColors.primary,
+          unselectedItemColor: AppColors.textSecondary,
+          type: BottomNavigationBarType.fixed,
           items: const [
             BottomNavigationBarItem(
               icon: Icon(Icons.home_outlined),
@@ -60,23 +65,12 @@ class MainScreen extends StatelessWidget {
             BottomNavigationBarItem(
               icon: Icon(Icons.calendar_month_outlined),
               activeIcon: Icon(Icons.calendar_month),
-              label: 'Schedule',
+              label: 'Draws',
             ),
           ],
         ),
       ),
-
-      // Central scanner FAB (positioned above the nav bar)
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: AppColors.primary,
-        onPressed: () {
-          // The Home screen has its own FAB handling,
-          // but this provides global scanner access
-          navController.changePage(0); // Go to home first
-        },
-        child: const Icon(Icons.camera_alt_outlined, color: Colors.white),
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+      // NO FAB here — HomeScreen owns its scanner FAB inside its own Scaffold.
     );
   }
 }

@@ -8,10 +8,12 @@ import 'package:get/get.dart';
 import 'package:get_storage/get_storage.dart';
 
 import '../../Config/app_config.dart';
-import '../../Utils/app_bottom_navigation_bar.dart';
+import '../../Controllers/user_controller.dart';
 import '../../Utils/storage_sevices.dart';
 import '../../Utils/utils.dart';
+import '../../View/Admin/AdminDashboard/admin_dashboard_screen.dart';
 import '../../View/SignInPage/sign_in_page.dart';
+import '../../View/main_screen.dart';
 
 class AuthController extends GetxController {
   TextEditingController phoneNumberCtrl = TextEditingController();
@@ -133,20 +135,35 @@ class AuthController extends GetxController {
         return;
       }
 
-      // 🟢 IF APPROVED
+      // 🟢 IF APPROVED — navigate to the right shell based on role
       if (status == 'active') {
         firebaseUser.value = cred.user;
 
+        // Read previously stored UID BEFORE overwriting it.
+        // UserController uses this to decide whether to clear stale data.
+        final String? previousUid = await AppStorage.getUserData();
+
+        // Persist the new UID locally
         AppStorage.setUserData(userId);
 
         await saveToken(userId);
 
+        // Fetch and cache the user profile. If a DIFFERENT user just logged in
+        // their old cached data is wiped and fresh data is loaded from Firestore.
+        final userCtrl = Get.find<UserController>();
+        await userCtrl.fetchAndCacheUser(
+          newUid: userId,
+          previousUid: previousUid,
+        );
+
         stopProgress();
 
-        if (dbRole == "admin") {
-          Get.offAll(() => AppBottomNavigationBarAdmin());
+        if (dbRole == 'admin') {
+          // Admin goes to the admin dashboard (draw upload + user management)
+          Get.offAll(() => const AdminDashboardScreen());
         } else {
-          Get.offAll(() => AppBottomNavigationBar());
+          // Regular user goes to the main tab shell
+          Get.offAll(() => MainScreen());
         }
       } else {
         stopProgress();
@@ -329,10 +346,24 @@ class AuthController extends GetxController {
   }
 
   Future<void> signOut() async {
+    // Sign out from Firebase (clears the persisted session on device)
     await _auth.signOut();
+
+    // Clear locally stored UID and session timestamp
     _box.remove(_loginTimeKey);
+    await AppStorage.clearUserData();
+
+    // Clear the cached user profile from UserController
+    Get.find<UserController>().clearUser();
+
     firebaseUser.value = null;
-    Get.offAll(SignInPage());
+
+    // Clear email/password fields so they don't show on next login
+    emailAddressCtrl.clear();
+    passwordCtrl.clear();
+
+    // Return to the login screen, removing all previous routes
+    Get.offAll(() => const SignInPage());
   }
 
   /// Default selection = Normal User

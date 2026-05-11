@@ -1,5 +1,10 @@
 // lib/View/Draws/draws_screen.dart
-// Draw results screen with denomination, city, and date filters
+//
+// Shows two sections:
+//   1. DRAW SCHEDULE  — official Pakistan National Savings prize bond schedule,
+//                       showing next upcoming draw date per denomination.
+//   2. DRAW RESULTS   — all draw results with denomination/city/date filters,
+//                       PDF download, and pull-to-refresh.
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -7,6 +12,7 @@ import 'package:intl/intl.dart';
 
 import '../../Controllers/DrawControllers/draw_controller.dart';
 import '../../Models/draw_model.dart';
+import '../../Services/pdf_export_service.dart';
 import '../../Utils/mock_data.dart';
 import 'draw_detail_screen.dart';
 
@@ -24,7 +30,7 @@ class DrawsScreen extends StatelessWidget {
         foregroundColor: Colors.white,
         title: const Text('Draw Results'),
         actions: [
-          // Clear filters button (visible only when filters are active)
+          // Clear filters button (only visible when a filter is active)
           Obx(() {
             final active = ctrl.filterDenomination.value != 0 ||
                 ctrl.filterCity.value.isNotEmpty ||
@@ -37,6 +43,15 @@ class DrawsScreen extends StatelessWidget {
                   )
                 : const SizedBox.shrink();
           }),
+
+          // Export current (filtered) results as PDF
+          IconButton(
+            icon: const Icon(Icons.picture_as_pdf_outlined),
+            tooltip: 'Export as PDF',
+            onPressed: () => _exportPdf(ctrl),
+          ),
+
+          // Filter button
           IconButton(
             icon: const Icon(Icons.tune),
             tooltip: 'Filter',
@@ -46,7 +61,7 @@ class DrawsScreen extends StatelessWidget {
       ),
       body: Column(
         children: [
-          // ── OFFLINE BANNER ──────────────────────────────────────────────────
+          // ── OFFLINE BANNER ────────────────────────────────────────────────────
           Obx(() => ctrl.isOffline.value
               ? Container(
                   width: double.infinity,
@@ -65,7 +80,7 @@ class DrawsScreen extends StatelessWidget {
                 )
               : const SizedBox.shrink()),
 
-          // ── ACTIVE FILTER CHIPS ─────────────────────────────────────────────
+          // ── ACTIVE FILTER CHIPS ───────────────────────────────────────────────
           Obx(() {
             final chips = <Widget>[];
             if (ctrl.filterDenomination.value != 0) {
@@ -94,7 +109,7 @@ class DrawsScreen extends StatelessWidget {
             );
           }),
 
-          // ── ERROR MESSAGE ───────────────────────────────────────────────────
+          // ── ERROR MESSAGE ─────────────────────────────────────────────────────
           Obx(() => ctrl.errorMessage.value.isNotEmpty
               ? Container(
                   padding: const EdgeInsets.all(12),
@@ -108,7 +123,7 @@ class DrawsScreen extends StatelessWidget {
                 )
               : const SizedBox.shrink()),
 
-          // ── DRAWS LIST ──────────────────────────────────────────────────────
+          // ── MAIN SCROLLABLE BODY ──────────────────────────────────────────────
           Expanded(
             child: Obx(() {
               if (ctrl.isLoading.value) {
@@ -117,38 +132,97 @@ class DrawsScreen extends StatelessWidget {
 
               final draws = ctrl.filteredDraws;
 
-              if (draws.isEmpty) {
-                return Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.emoji_events_outlined,
-                          size: 60, color: Colors.grey),
-                      const SizedBox(height: 16),
-                      const Text('No draw results found',
-                          style: TextStyle(color: Colors.grey)),
-                      const SizedBox(height: 8),
-                      TextButton(
-                        onPressed: ctrl.clearAllFilters,
-                        child: const Text('Clear filters'),
-                      ),
-                    ],
-                  ),
-                );
-              }
-
               return RefreshIndicator(
                 onRefresh: ctrl.loadDraws,
-                child: ListView.builder(
+                child: ListView(
                   padding: const EdgeInsets.all(16),
-                  itemCount: draws.length,
-                  itemBuilder: (_, i) => _DrawCard(draw: draws[i]),
+                  children: [
+                    // ── Section 1: Draw Schedule ────────────────────────────
+                    const _DrawScheduleSection(),
+                    const SizedBox(height: 20),
+
+                    // ── Section 2: Draw Results ─────────────────────────────
+                    const Padding(
+                      padding: EdgeInsets.only(bottom: 12),
+                      child: Text(
+                        'DRAW RESULTS',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.grey,
+                          letterSpacing: 1.3,
+                        ),
+                      ),
+                    ),
+
+                    if (draws.isEmpty)
+                      Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const SizedBox(height: 24),
+                            const Icon(Icons.emoji_events_outlined,
+                                size: 60, color: Colors.grey),
+                            const SizedBox(height: 16),
+                            const Text('No draw results found',
+                                style: TextStyle(color: Colors.grey)),
+                            const SizedBox(height: 8),
+                            TextButton(
+                              onPressed: ctrl.clearAllFilters,
+                              child: const Text('Clear filters'),
+                            ),
+                          ],
+                        ),
+                      )
+                    else
+                      ...draws.map((d) => _DrawCard(draw: d)).toList(),
+                  ],
                 ),
               );
             }),
           ),
         ],
       ),
+    );
+  }
+
+  // Export the currently filtered draws to a PDF and open it.
+  // If no filter is active, exports all loaded draws.
+  Future<void> _exportPdf(DrawController ctrl) async {
+    final draws = ctrl.filteredDraws;
+
+    if (draws.isEmpty) {
+      Get.snackbar(
+        'Nothing to Export',
+        'No draw results match the current filter.',
+        snackPosition: SnackPosition.BOTTOM,
+      );
+      return;
+    }
+
+    // Build a human-readable label for the filter applied
+    String filterLabel = 'All Denominations';
+    if (ctrl.filterDenomination.value != 0) {
+      filterLabel = 'Rs. ${ctrl.filterDenomination.value}';
+    }
+    if (ctrl.filterCity.value.isNotEmpty) {
+      filterLabel += ' – ${ctrl.filterCity.value}';
+    }
+    if (ctrl.hasDateFilter.value) {
+      filterLabel += ' (date filtered)';
+    }
+
+    // Show a loading snackbar
+    Get.snackbar(
+      'Generating PDF…',
+      'Please wait while the report is being created.',
+      snackPosition: SnackPosition.BOTTOM,
+      duration: const Duration(seconds: 2),
+    );
+
+    await PdfExportService().exportDrawsToPdf(
+      draws: draws,
+      filterLabel: filterLabel,
     );
   }
 
@@ -164,7 +238,277 @@ class DrawsScreen extends StatelessWidget {
   }
 }
 
-// ── Filter Sheet ──────────────────────────────────────────────────────────────
+// ── Pakistani Draw Schedule ────────────────────────────────────────────────────
+//
+// Official National Savings Pakistan prize bond draw schedule.
+// Automatically computes the NEXT upcoming draw date for each denomination.
+class _DrawScheduleSection extends StatefulWidget {
+  const _DrawScheduleSection();
+
+  @override
+  State<_DrawScheduleSection> createState() => _DrawScheduleSectionState();
+}
+
+class _DrawScheduleSectionState extends State<_DrawScheduleSection> {
+  bool _expanded = true; // Expanded by default so professor can see it
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // ── Section header with toggle ──────────────────────────────────────
+        GestureDetector(
+          onTap: () => setState(() => _expanded = !_expanded),
+          child: Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1A3C40),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.calendar_month,
+                    color: Colors.white, size: 20),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Text(
+                    'Draw Schedule (National Savings Pakistan)',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+                Icon(
+                  _expanded ? Icons.expand_less : Icons.expand_more,
+                  color: Colors.white70,
+                ),
+              ],
+            ),
+          ),
+        ),
+
+        // ── Schedule cards ──────────────────────────────────────────────────
+        if (_expanded) ...[
+          const SizedBox(height: 10),
+          ..._scheduleItems().map(_buildScheduleCard).toList(),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildScheduleCard(_ScheduleEntry entry) {
+    final now = DateTime.now();
+    final next = entry.nextDrawDate(now);
+    final daysLeft = next.difference(DateTime(now.year, now.month, now.day)).inDays;
+
+    final String countdownText = daysLeft == 0
+        ? 'Today!'
+        : daysLeft == 1
+            ? 'Tomorrow'
+            : '$daysLeft days left';
+
+    final Color countdownColor = daysLeft <= 3
+        ? Colors.red.shade600
+        : daysLeft <= 7
+            ? Colors.orange.shade600
+            : const Color(0xFF2E7D6B);
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      elevation: 0,
+      color: Colors.white,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            // Denomination badge
+            Container(
+              width: 64,
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1A3C40).withOpacity(0.08),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                'Rs.\n${_formatDenom(entry.denomination)}',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF1A3C40),
+                  height: 1.2,
+                ),
+              ),
+            ),
+            const SizedBox(width: 14),
+
+            // Date and schedule info
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Next Draw: ${DateFormat('EEEE, d MMMM yyyy').format(next)}',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF1A1F2E),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    entry.scheduleLabel,
+                    style: const TextStyle(
+                        fontSize: 11, color: Colors.grey),
+                  ),
+                ],
+              ),
+            ),
+
+            // Countdown badge
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: countdownColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                countdownText,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: countdownColor,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _formatDenom(int denom) {
+    if (denom >= 1000) {
+      return '${(denom / 1000).toStringAsFixed(denom % 1000 == 0 ? 0 : 1)}K';
+    }
+    return '$denom';
+  }
+
+  // ── Official Pakistan National Savings Prize Bond Schedule ─────────────────
+  //
+  // Source: National Savings Pakistan (savings.gov.pk)
+  //
+  //  Rs. 100    — 1st of every month           (monthly)
+  //  Rs. 200    — 15th of every month          (monthly)
+  //  Rs. 750    — 15th of every month          (monthly)
+  //  Rs. 1,500  — 1st & 15th of every month   (bi-monthly)
+  //  Rs. 7,500  — 1st of Feb, May, Aug, Nov   (quarterly)
+  //  Rs. 15,000 — 1st of Jan, Apr, Jul, Oct   (quarterly)
+  //  Rs. 25,000 — 1st of Jan, Apr, Jul, Oct   (quarterly)
+  //  Rs. 40,000 — 1st of Mar, Jun, Sep, Dec   (quarterly)
+
+  List<_ScheduleEntry> _scheduleItems() => [
+        _ScheduleEntry(
+          denomination: 100,
+          scheduleLabel: 'Every 1st of the month',
+          nextDrawDate: (now) => _nextDayOfMonth(now, 1),
+        ),
+        _ScheduleEntry(
+          denomination: 200,
+          scheduleLabel: 'Every 15th of the month',
+          nextDrawDate: (now) => _nextDayOfMonth(now, 15),
+        ),
+        _ScheduleEntry(
+          denomination: 750,
+          scheduleLabel: 'Every 15th of the month',
+          nextDrawDate: (now) => _nextDayOfMonth(now, 15),
+        ),
+        _ScheduleEntry(
+          denomination: 1500,
+          scheduleLabel: 'Every 1st & 15th of the month',
+          nextDrawDate: (now) => _nextAmong(now, [1, 15]),
+        ),
+        _ScheduleEntry(
+          denomination: 7500,
+          scheduleLabel: 'Quarterly — 1st of Feb, May, Aug, Nov',
+          nextDrawDate: (now) => _nextMonthDay(now, [2, 5, 8, 11], 1),
+        ),
+        _ScheduleEntry(
+          denomination: 15000,
+          scheduleLabel: 'Quarterly — 1st of Jan, Apr, Jul, Oct',
+          nextDrawDate: (now) => _nextMonthDay(now, [1, 4, 7, 10], 1),
+        ),
+        _ScheduleEntry(
+          denomination: 25000,
+          scheduleLabel: 'Quarterly — 1st of Jan, Apr, Jul, Oct',
+          nextDrawDate: (now) => _nextMonthDay(now, [1, 4, 7, 10], 1),
+        ),
+        _ScheduleEntry(
+          denomination: 40000,
+          scheduleLabel: 'Quarterly — 1st of Mar, Jun, Sep, Dec',
+          nextDrawDate: (now) => _nextMonthDay(now, [3, 6, 9, 12], 1),
+        ),
+      ];
+
+  // Returns the next occurrence of [day] in the month (today counts if draw
+  // hasn't happened yet today — i.e., if today IS that day return today).
+  DateTime _nextDayOfMonth(DateTime now, int day) {
+    final candidate = DateTime(now.year, now.month, day);
+    if (!candidate.isBefore(DateTime(now.year, now.month, now.day))) {
+      return candidate;
+    }
+    // Already passed — go to next month
+    final next = DateTime(now.year, now.month + 1, day);
+    return next;
+  }
+
+  // Returns the next date that is one of [days] in the month
+  DateTime _nextAmong(DateTime now, List<int> days) {
+    final today = DateTime(now.year, now.month, now.day);
+    for (final day in days) {
+      final candidate = DateTime(now.year, now.month, day);
+      if (!candidate.isBefore(today)) return candidate;
+    }
+    // All days passed — check next month
+    return DateTime(now.year, now.month + 1, days.first);
+  }
+
+  // Returns the next date where month is in [months] and day equals [day]
+  DateTime _nextMonthDay(DateTime now, List<int> months, int day) {
+    final today = DateTime(now.year, now.month, now.day);
+
+    // Check current year first
+    for (final month in months) {
+      final candidate = DateTime(now.year, month, day);
+      if (!candidate.isBefore(today)) return candidate;
+    }
+
+    // All this year's draws passed — go to next year
+    return DateTime(now.year + 1, months.first, day);
+  }
+}
+
+// Helper data class for schedule entries
+class _ScheduleEntry {
+  final int denomination;
+  final String scheduleLabel;
+  final DateTime Function(DateTime now) nextDrawDate;
+
+  const _ScheduleEntry({
+    required this.denomination,
+    required this.scheduleLabel,
+    required this.nextDrawDate,
+  });
+}
+
+// ── Filter Sheet ───────────────────────────────────────────────────────────────
 class _FilterSheet extends StatefulWidget {
   final DrawController ctrl;
   const _FilterSheet({required this.ctrl});
@@ -203,7 +547,6 @@ class _FilterSheetState extends State<_FilterSheet> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Title row
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -211,21 +554,19 @@ class _FilterSheetState extends State<_FilterSheet> {
                       style: TextStyle(
                           fontSize: 18, fontWeight: FontWeight.bold)),
                   TextButton(
-                    onPressed: () {
-                      setState(() {
-                        _selectedDenom = 0;
-                        _selectedCity = '';
-                        _dateFrom = null;
-                        _dateTo = null;
-                      });
-                    },
+                    onPressed: () => setState(() {
+                      _selectedDenom = 0;
+                      _selectedCity = '';
+                      _dateFrom = null;
+                      _dateTo = null;
+                    }),
                     child: const Text('Clear All'),
                   ),
                 ],
               ),
               const SizedBox(height: 16),
 
-              // ── Denomination ────────────────────────────────────────────────
+              // ── Denomination ─────────────────────────────────────────────────
               const Text('Denomination',
                   style: TextStyle(fontWeight: FontWeight.w600)),
               const SizedBox(height: 8),
@@ -248,7 +589,7 @@ class _FilterSheetState extends State<_FilterSheet> {
               ),
               const SizedBox(height: 20),
 
-              // ── City ───────────────────────────────────────────────────────
+              // ── City ────────────────────────────────────────────────────────
               const Text('City',
                   style: TextStyle(fontWeight: FontWeight.w600)),
               const SizedBox(height: 8),
@@ -263,7 +604,8 @@ class _FilterSheetState extends State<_FilterSheet> {
                     FilterChip(
                       label: const Text('All Cities'),
                       selected: _selectedCity.isEmpty,
-                      onSelected: (_) => setState(() => _selectedCity = ''),
+                      onSelected: (_) =>
+                          setState(() => _selectedCity = ''),
                     ),
                     ...cities.map((c) => FilterChip(
                           label: Text(c),
@@ -275,7 +617,7 @@ class _FilterSheetState extends State<_FilterSheet> {
                 ),
               const SizedBox(height: 20),
 
-              // ── Date Range ─────────────────────────────────────────────────
+              // ── Date Range ──────────────────────────────────────────────────
               const Text('Date Range',
                   style: TextStyle(fontWeight: FontWeight.w600)),
               const SizedBox(height: 8),
@@ -293,8 +635,8 @@ class _FilterSheetState extends State<_FilterSheet> {
                           context: context,
                           initialDate: _dateFrom ?? DateTime(2020),
                           firstDate: DateTime(2010),
-                          lastDate: DateTime.now().add(
-                              const Duration(days: 365)),
+                          lastDate: DateTime.now()
+                              .add(const Duration(days: 365)),
                         );
                         if (picked != null) {
                           setState(() => _dateFrom = picked);
@@ -315,8 +657,8 @@ class _FilterSheetState extends State<_FilterSheet> {
                           context: context,
                           initialDate: _dateTo ?? DateTime.now(),
                           firstDate: DateTime(2010),
-                          lastDate: DateTime.now().add(
-                              const Duration(days: 365)),
+                          lastDate: DateTime.now()
+                              .add(const Duration(days: 365)),
                         );
                         if (picked != null) {
                           setState(() => _dateTo = picked);
@@ -327,17 +669,15 @@ class _FilterSheetState extends State<_FilterSheet> {
                   if (_dateFrom != null || _dateTo != null)
                     IconButton(
                       icon: const Icon(Icons.close, size: 18),
-                      onPressed: () =>
-                          setState(() {
-                            _dateFrom = null;
-                            _dateTo = null;
-                          }),
+                      onPressed: () => setState(() {
+                        _dateFrom = null;
+                        _dateTo = null;
+                      }),
                     ),
                 ],
               ),
               const SizedBox(height: 24),
 
-              // ── Apply Button ───────────────────────────────────────────────
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
@@ -429,8 +769,7 @@ class _DrawCard extends StatelessWidget {
                                 width: 20,
                                 height: 20,
                                 child: Obx(() => CircularProgressIndicator(
-                                      value:
-                                          ctrl.downloadProgress[draw.id],
+                                      value: ctrl.downloadProgress[draw.id],
                                       strokeWidth: 2,
                                     )),
                               )

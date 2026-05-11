@@ -47,4 +47,36 @@ class UserModel {
       savedBondsCount: data['savedBondsCount'] ?? 0,
     );
   }
+
+  // Serialize to Map for GetStorage (local cache)
+  Map<String, dynamic> toJson() {
+    return {
+      'uid': uid,
+      'firstName': firstName,
+      'lastName': lastName,
+      'email': email,
+      'role': role,
+      'status': status,
+      'city': city,
+      'fcmToken': fcmToken,
+      'createdAt': createdAt.toIso8601String(),
+      'savedBondsCount': savedBondsCount,
+    };
+  }
+
+  // Deserialize from GetStorage Map
+  factory UserModel.fromJson(Map<String, dynamic> data) {
+    return UserModel(
+      uid: data['uid'] ?? '',
+      firstName: data['firstName'] ?? '',
+      lastName: data['lastName'] ?? '',
+      email: data['email'] ?? '',
+      role: data['role'] ?? 'normal_user',
+      status: data['status'] ?? 'active',
+      city: data['city'] ?? '',
+      fcmToken: data['fcmToken'],
+      createdAt: DateTime.tryParse(data['createdAt'] ?? '') ?? DateTime.now(),
+      savedBondsCount: data['savedBondsCount'] ?? 0,
+    );
+  }
 }

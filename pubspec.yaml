@@ -38,6 +38,8 @@ dependencies:
   path_provider: ^2.1.4            # Get device file paths
   dio: ^5.7.0                      # Download files with progress
   open_filex: ^4.5.0               # Open downloaded PDFs
+  pdf: ^3.11.1                     # Generate PDFs from draw results
+  printing: ^5.13.1                # Share / save generated PDFs
 
   # Connectivity
   connectivity_plus: ^6.1.1        # Detect online/offline

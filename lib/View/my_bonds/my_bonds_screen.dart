@@ -1,6 +1,14 @@
-// lib/screens/my_bonds/my_bonds_screen.dart
-// Shows user's saved prize bonds with auto-check results
+// lib/View/my_bonds/my_bonds_screen.dart
+//
+// Shows the user's saved prize bonds.
+//
+// AUTH WALL: If the user is NOT logged in, this screen shows a full-screen
+//            "Sign In" prompt with no bond data visible at all.
+//
+// OFFLINE-FIRST: Bonds are stored locally; the sheet closes after save.
+// AUTO-CHECK:    Checks bonds against draw results on open.
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
@@ -8,41 +16,188 @@ import 'package:intl/intl.dart';
 import '../../Theme/app_theme.dart';
 import '../../Utils/common_widgets.dart';
 import '../../Utils/mock_data.dart';
-import '../../controllers/my_bonds_controller.dart';
+import '../../Controllers/my_bonds_controller.dart';
 import '../../models/bond_model.dart';
+import '../SignInPage/sign_in_page.dart';
 import '../settings/settings_screen.dart';
 
 class MyBondsScreen extends StatelessWidget {
-  MyBondsScreen({super.key});
+  const MyBondsScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final MyBondsController controller = Get.put(MyBondsController());
+    // Show the auth wall immediately — no need to create a controller yet
+    if (FirebaseAuth.instance.currentUser == null) {
+      return const _GuestWall();
+    }
 
+    // User is logged in — show the full bonds screen
+    final MyBondsController controller = Get.put(MyBondsController());
+    return _BondsBody(controller: controller);
+  }
+}
+
+// ── Full-screen guest auth wall ────────────────────────────────────────────────
+//
+// Shown when no Firebase user is signed in.
+// Contains an illustration, description, and Sign In / Create Account buttons.
+class _GuestWall extends StatelessWidget {
+  const _GuestWall();
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
         child: Column(
           children: [
-            // Header
+            // ── Minimal header ───────────────────────────────────────────────
             AppHeader(
               title: 'My Portfolio',
               onSettingsTap: () => Get.to(() => SettingsScreen()),
             ),
 
-            // Body
+            // ── Auth wall content ────────────────────────────────────────────
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 32),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    // Lock icon illustration
+                    Container(
+                      padding: const EdgeInsets.all(28),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withOpacity(0.07),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.account_balance_wallet_outlined,
+                        size: 64,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                    const SizedBox(height: 28),
+
+                    const Text(
+                      'Your Bond Portfolio',
+                      style: AppTextStyles.heading2,
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 12),
+
+                    const Text(
+                      'Sign in to save your prize bonds, check winning results, '
+                      'and keep your portfolio synced across devices.',
+                      style: AppTextStyles.bodySecondary,
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 36),
+
+                    // ── Sign In button ───────────────────────────────────────
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: () => Get.to(() => const SignInPage()),
+                        icon: const Icon(Icons.login),
+                        label: const Text('Sign In',
+                            style: TextStyle(fontSize: 16)),
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12)),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // ── Create account link ──────────────────────────────────
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: () => Get.to(() => const SignInPage()),
+                        icon: const Icon(Icons.person_add_outlined),
+                        label: const Text('Create Account',
+                            style: TextStyle(fontSize: 16)),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.primary,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          side: const BorderSide(color: AppColors.primary),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12)),
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 24),
+
+                    // Offline note
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFF3E0),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                            color: AppColors.accentYellow.withOpacity(0.4)),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.offline_bolt_outlined,
+                              color: AppColors.accentYellow, size: 20),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Bonds sync to the cloud when you have internet. '
+                              'They always load from your device first.',
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color: AppColors.textPrimary),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Bonds body (logged-in users only) ─────────────────────────────────────────
+class _BondsBody extends StatelessWidget {
+  final MyBondsController controller;
+  const _BondsBody({required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      body: SafeArea(
+        child: Column(
+          children: [
+            // ── Header ───────────────────────────────────────────────────────
+            AppHeader(
+              title: 'My Portfolio',
+              onSettingsTap: () => Get.to(() => SettingsScreen()),
+            ),
+
+            // ── Body ─────────────────────────────────────────────────────────
             Expanded(
               child: Obx(() {
-                // Show loading while auto-checking
                 if (controller.isAutoChecking.value) {
                   return const LoadingIndicator(
-                      message: 'Auto-checking your bonds...');
+                      message: 'Auto-checking your bonds…');
                 }
 
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // ── Saved Bonds Header + Add Button ──────────────────────
+                    // ── Header row with Add button ────────────────────────────
                     Padding(
                       padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
                       child: Row(
@@ -51,7 +206,7 @@ class MyBondsScreen extends StatelessWidget {
                           const Text('Saved Bonds',
                               style: AppTextStyles.heading2),
                           ElevatedButton.icon(
-                            onPressed: () => _showAddBondDialog(controller),
+                            onPressed: () => _showAddBondSheet(controller),
                             icon: const Icon(Icons.add, size: 18),
                             label: const Text('Add New'),
                             style: ElevatedButton.styleFrom(
@@ -63,30 +218,28 @@ class MyBondsScreen extends StatelessWidget {
                       ),
                     ),
 
-                    // ── Bond List ─────────────────────────────────────────────
+                    // ── Bond list or empty state ───────────────────────────────
                     Expanded(
-                      child: controller.savedBonds.isEmpty
+                      child: Obx(() => controller.savedBonds.isEmpty
                           ? const EmptyState(
                               icon: Icons.account_balance_wallet_outlined,
                               title: 'No Bonds Saved',
                               subtitle:
-                                  'Tap "Add New" to start tracking your prize bonds',
+                                  'Tap "Add New" to start tracking your bonds',
                             )
                           : ListView.builder(
                               padding:
                                   const EdgeInsets.symmetric(horizontal: 16),
                               itemCount: controller.savedBonds.length,
-                              itemBuilder: (context, index) {
-                                return _BondCard(
-                                  bond: controller.savedBonds[index],
-                                  onDelete: () => controller.deleteBond(
-                                      controller.savedBonds[index].id),
-                                );
-                              },
-                            ),
+                              itemBuilder: (_, i) => _BondCard(
+                                bond: controller.savedBonds[i],
+                                onDelete: () => controller
+                                    .deleteBond(controller.savedBonds[i].id),
+                              ),
+                            )),
                     ),
 
-                    // ── Sign-in prompt for auto-check ────────────────────────
+                    // ── Offline info strip ────────────────────────────────────
                     Container(
                       margin: const EdgeInsets.all(16),
                       padding: const EdgeInsets.all(14),
@@ -96,28 +249,17 @@ class MyBondsScreen extends StatelessWidget {
                         border: Border.all(
                             color: AppColors.accentYellow.withOpacity(0.4)),
                       ),
-                      child: Row(
+                      child: const Row(
                         children: [
-                          const Icon(Icons.verified_user_outlined,
+                          Icon(Icons.offline_bolt_outlined,
                               color: AppColors.accentYellow, size: 20),
-                          const SizedBox(width: 8),
+                          SizedBox(width: 8),
                           Expanded(
-                            child: RichText(
-                              text: const TextSpan(
-                                style: TextStyle(
-                                    fontSize: 13, color: AppColors.textPrimary),
-                                children: [
-                                  TextSpan(text: 'Sign into enable '),
-                                  TextSpan(
-                                    text: 'Auto-Check',
-                                    style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        color: AppColors.accentYellow),
-                                  ),
-                                  TextSpan(
-                                      text: ' and cloud sync for your bonds.'),
-                                ],
-                              ),
+                            child: Text(
+                              'Bonds are saved on your device first. They sync to the cloud when you have internet.',
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color: AppColors.textPrimary),
                             ),
                           ),
                         ],
@@ -133,14 +275,19 @@ class MyBondsScreen extends StatelessWidget {
     );
   }
 
-  // Show bottom sheet dialog to add a new bond
-  void _showAddBondDialog(MyBondsController controller) {
+  // ── Add Bond Bottom Sheet ──────────────────────────────────────────────────
+  void _showAddBondSheet(MyBondsController controller) {
     final TextEditingController numberCtrl = TextEditingController();
     final RxInt selectedDenom = 750.obs;
 
     Get.bottomSheet(
       Container(
-        padding: const EdgeInsets.all(24),
+        padding: EdgeInsets.only(
+          left: 24,
+          right: 24,
+          top: 24,
+          bottom: Get.mediaQuery.viewInsets.bottom + 24,
+        ),
         decoration: const BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -152,7 +299,7 @@ class MyBondsScreen extends StatelessWidget {
             const Text('Add New Bond', style: AppTextStyles.heading2),
             const SizedBox(height: 16),
 
-            // Denomination picker
+            // Denomination dropdown
             const Text('Denomination', style: AppTextStyles.bodySecondary),
             const SizedBox(height: 6),
             Obx(() => Container(
@@ -180,29 +327,30 @@ class MyBondsScreen extends StatelessWidget {
             const SizedBox(height: 12),
 
             // Bond number input
-            const Text('Bond Number', style: AppTextStyles.bodySecondary),
+            const Text('Bond Number (6 digits)',
+                style: AppTextStyles.bodySecondary),
             const SizedBox(height: 6),
             TextField(
               controller: numberCtrl,
               keyboardType: TextInputType.number,
+              maxLength: 6,
               decoration: const InputDecoration(
-                hintText: 'e.g., 123456',
+                hintText: 'e.g. 123456',
+                counterText: '',
               ),
             ),
             const SizedBox(height: 20),
 
-            // Save button
+            // Save button — controller calls Get.back() inside addBond() on success
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: () {
-                  controller.addBond(numberCtrl.text, selectedDenom.value);
-                  Get.back();
-                },
-                child: const Text('Save Bond'),
+                onPressed: () =>
+                    controller.addBond(numberCtrl.text, selectedDenom.value),
+                child: const Text('Save Bond',
+                    style: TextStyle(fontSize: 16)),
               ),
             ),
-            const SizedBox(height: 8),
           ],
         ),
       ),
@@ -231,10 +379,8 @@ class _BondCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Denomination badge
                   DenominationBadge(denomination: bond.denomination),
                   const SizedBox(height: 8),
-                  // Bond number (big and bold like in Figma)
                   Text(
                     bond.number,
                     style: const TextStyle(
@@ -249,7 +395,6 @@ class _BondCard extends StatelessWidget {
                     'Added: ${DateFormat('yyyy-MM-dd').format(bond.addedDate)}',
                     style: AppTextStyles.caption,
                   ),
-                  // Show winner badge if won
                   if (bond.isWinner) ...[
                     const SizedBox(height: 6),
                     Container(
@@ -272,8 +417,8 @@ class _BondCard extends StatelessWidget {
             // Delete button
             IconButton(
               onPressed: onDelete,
-              icon:
-                  const Icon(Icons.delete_outline, color: AppColors.accentRed),
+              icon: const Icon(Icons.delete_outline,
+                  color: AppColors.accentRed),
             ),
           ],
         ),

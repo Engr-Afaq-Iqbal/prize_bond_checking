@@ -1,5 +1,51 @@
 // lib/View/Admin/DrawManagement/create_draw_screen.dart
-// Admin screen to create a new draw result and upload PDF
+//
+// Admin screen — fill in draw details and optionally attach a PDF.
+//
+// ─────────────────────────────────────────────────────────────────────────────
+// FIREBASE SETUP GUIDE (run once before first use)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// 1. Enable Firebase Storage
+//    • Open Firebase Console → your project → Build → Storage → Get started
+//    • Choose a storage location (e.g. asia-south1 for Pakistan)
+//    • Click Done
+//
+// 2. Configure Storage Security Rules (allow authenticated uploads)
+//    In the Storage "Rules" tab, replace the default rules with:
+//
+//      rules_version = '2';
+//      service firebase.storage {
+//        match /b/{bucket}/o {
+//          // Anyone can read (download PDFs)
+//          match /{allPaths=**} {
+//            allow read;
+//          }
+//          // Only authenticated users can upload
+//          match /draw_pdfs/{drawId} {
+//            allow write: if request.auth != null;
+//          }
+//        }
+//      }
+//
+// 3. Enable Firestore Database
+//    • Firebase Console → Build → Firestore Database → Create database
+//    • Start in production mode, choose same region as Storage
+//    • Add Firestore Security Rules that allow authenticated reads/writes.
+//
+// 4. How data is saved
+//    When admin taps "Publish Draw Result":
+//      a. A Firestore document is created in the 'draws' collection with fields:
+//           denomination, drawNumber, drawDate, city, winningNumbers, uploadedBy
+//      b. The PDF (if selected) is uploaded to Firebase Storage at:
+//           draw_pdfs/<drawId>.pdf
+//      c. Firestore document is updated with:
+//           pdfUrl        → public download URL
+//           pdfName       → original filename picked by admin
+//           pdfUploadedAt → ISO-8601 upload timestamp
+//           category      → "draw_result"
+//      d. All saved user bonds matching denomination + winningNumbers are marked.
+// ─────────────────────────────────────────────────────────────────────────────
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -51,6 +97,10 @@ class CreateDrawScreen extends StatelessWidget {
                 ],
               ),
             ),
+            const SizedBox(height: 12),
+
+            // ── FIREBASE SETUP GUIDE (collapsible) ────────────────────────
+            const _FirebaseSetupGuide(),
             const SizedBox(height: 24),
 
             // ── DENOMINATION ───────────────────────────────────────────────
@@ -289,6 +339,192 @@ class CreateDrawScreen extends StatelessWidget {
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       ),
+    );
+  }
+}
+
+// ── Firebase Setup Guide ───────────────────────────────────────────────────────
+//
+// Collapsible card shown to the admin explaining the one-time Firebase
+// configuration needed before the upload feature works.
+class _FirebaseSetupGuide extends StatefulWidget {
+  const _FirebaseSetupGuide();
+
+  @override
+  State<_FirebaseSetupGuide> createState() => _FirebaseSetupGuideState();
+}
+
+class _FirebaseSetupGuideState extends State<_FirebaseSetupGuide> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.blue.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.blue.shade200),
+      ),
+      child: Column(
+        children: [
+          // Header row — tap to expand/collapse
+          InkWell(
+            onTap: () => setState(() => _expanded = !_expanded),
+            borderRadius: BorderRadius.circular(12),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              child: Row(
+                children: [
+                  Icon(Icons.settings_outlined,
+                      color: Colors.blue.shade700, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Firebase Setup Guide (tap to expand)',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.blue.shade700,
+                      ),
+                    ),
+                  ),
+                  Icon(
+                    _expanded ? Icons.expand_less : Icons.expand_more,
+                    color: Colors.blue.shade700,
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Expandable steps
+          if (_expanded)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: const [
+                  Divider(height: 1),
+                  SizedBox(height: 12),
+                  _SetupStep(
+                    number: '1',
+                    title: 'Enable Firebase Storage',
+                    detail:
+                        'Firebase Console → your project → Build → Storage → '
+                        'Get started → choose region (asia-south1) → Done.',
+                  ),
+                  SizedBox(height: 10),
+                  _SetupStep(
+                    number: '2',
+                    title: 'Set Storage Security Rules',
+                    detail:
+                        'In Storage → Rules tab, allow read for everyone and '
+                        'write only for signed-in users:\n\n'
+                        'match /draw_pdfs/{id} {\n'
+                        '  allow read;\n'
+                        '  allow write: if request.auth != null;\n'
+                        '}',
+                    isCode: true,
+                  ),
+                  SizedBox(height: 10),
+                  _SetupStep(
+                    number: '3',
+                    title: 'Enable Firestore Database',
+                    detail:
+                        'Firebase Console → Build → Firestore Database → '
+                        'Create database → Production mode → same region → Done.',
+                  ),
+                  SizedBox(height: 10),
+                  _SetupStep(
+                    number: '4',
+                    title: 'What gets saved to Firestore',
+                    detail:
+                        'Each uploaded draw stores:\n'
+                        '• pdfUrl — download link\n'
+                        '• pdfName — original filename\n'
+                        '• pdfUploadedAt — timestamp\n'
+                        '• category — "draw_result"',
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// Single numbered step inside the setup guide
+class _SetupStep extends StatelessWidget {
+  final String number;
+  final String title;
+  final String detail;
+  final bool isCode;
+
+  const _SetupStep({
+    required this.number,
+    required this.title,
+    required this.detail,
+    this.isCode = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Step number badge
+        Container(
+          width: 22,
+          height: 22,
+          decoration: BoxDecoration(
+            color: Colors.blue.shade700,
+            shape: BoxShape.circle,
+          ),
+          child: Center(
+            child: Text(
+              number,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title,
+                  style: const TextStyle(
+                      fontSize: 13, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 3),
+              Container(
+                padding: isCode
+                    ? const EdgeInsets.all(8)
+                    : EdgeInsets.zero,
+                decoration: isCode
+                    ? BoxDecoration(
+                        color: Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(6),
+                      )
+                    : null,
+                child: Text(
+                  detail,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey.shade700,
+                    fontFamily: isCode ? 'monospace' : null,
+                    height: 1.5,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

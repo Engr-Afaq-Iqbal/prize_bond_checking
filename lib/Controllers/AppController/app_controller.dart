@@ -4,6 +4,7 @@ import 'package:prize_bond_app/Controllers/AuthControllers/signup_controller.dar
 import 'package:prize_bond_app/Controllers/CustomerController/customer_controller.dart';
 import 'package:prize_bond_app/Controllers/DrawControllers/draw_controller.dart';
 import 'package:prize_bond_app/Controllers/bottom_nav_controller.dart';
+import 'package:prize_bond_app/Controllers/user_controller.dart';
 
 import '../../Services/connectivity_service.dart';
 
@@ -14,6 +15,9 @@ class AppController {
 
     // ── Draw data (needed by both Home and Draws screens) ─────────────────────
     Get.put(DrawController(), permanent: true);
+
+    // ── User profile cache (available across all screens) ─────────────────────
+    Get.put(UserController(), permanent: true);
 
     // ── Auth + Nav ────────────────────────────────────────────────────────────
     Get.put(CustomerController());

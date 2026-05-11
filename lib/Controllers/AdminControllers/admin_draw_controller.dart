@@ -148,8 +148,14 @@ class AdminDrawController extends GetxController {
             selectedPdf.value!, drawId);
 
         if (pdfUrl != null) {
-          // Update Firestore with PDF URL
-          await _drawService.updateDraw(drawId, {'pdfUrl': pdfUrl});
+          // Save PDF metadata to Firestore: URL, original filename, upload
+          // timestamp, and category so users/admin can identify the file later.
+          await _drawService.updateDraw(drawId, {
+            'pdfUrl': pdfUrl,
+            'pdfName': pdfName.value,                        // original filename
+            'pdfUploadedAt': DateTime.now().toIso8601String(), // ISO-8601 timestamp
+            'category': 'draw_result',                       // type identifier
+          });
           uploadProgress.value = 0.8;
         }
       }

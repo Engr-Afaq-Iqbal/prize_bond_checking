@@ -101,16 +101,34 @@ class DrawController extends GetxController {
   // ─── FILTERED DRAWS ────────────────────────────────────────────────────────
 
   List<DrawModel> get filteredDraws {
+    // ⚠️ IMPORTANT: We must read ALL reactive (Rx) variables we rely on here
+    // so that Obx() widgets rebuild whenever any of these values change.
+    //
+    // filterDateFrom and filterDateTo are plain DateTime? (not Rx), so they
+    // don't trigger rebuilds on their own. Reading hasDateFilter.value here
+    // ensures Obx rebuilds when the date filter is applied or cleared.
+    final denom     = filterDenomination.value; // Rx — triggers rebuild
+    final city      = filterCity.value;          // Rx — triggers rebuild
+    final hasDate   = hasDateFilter.value;       // Rx — triggers rebuild for date changes
+
     return draws.where((d) {
-      if (filterDenomination.value != 0 &&
-          d.denomination != filterDenomination.value) return false;
-      if (filterCity.value.isNotEmpty &&
-          !d.city.toLowerCase().contains(filterCity.value.toLowerCase()))
-        return false;
-      if (filterDateFrom != null &&
-          d.drawDate.isBefore(filterDateFrom!)) return false;
-      if (filterDateTo != null &&
-          d.drawDate.isAfter(filterDateTo!)) return false;
+      // Filter by denomination
+      if (denom != 0 && d.denomination != denom) return false;
+
+      // Filter by city (case-insensitive contains)
+      if (city.isNotEmpty &&
+          !d.city.toLowerCase().contains(city.toLowerCase())) return false;
+
+      // Filter by date range (only applied when hasDate is true)
+      if (hasDate) {
+        if (filterDateFrom != null && d.drawDate.isBefore(filterDateFrom!)) {
+          return false;
+        }
+        if (filterDateTo != null && d.drawDate.isAfter(filterDateTo!)) {
+          return false;
+        }
+      }
+
       return true;
     }).toList();
   }

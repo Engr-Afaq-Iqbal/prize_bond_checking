@@ -115,9 +115,11 @@ class ScannerController extends GetxController {
     );
   }
 
-  // Extract a 6–9 digit bond number from the OCR text
+  // Extract exactly 6-digit bond number from OCR text.
+  // Pakistan prize bonds are always 6 digits (e.g. 887766).
+  // We reject 7–9 digit matches to avoid false positives from other printed text.
   String? _extractBondNumber(String text) {
-    final regex = RegExp(r'\b\d{6,9}\b');
+    final regex = RegExp(r'\b\d{6}\b');
     final match = regex.firstMatch(text);
     return match?.group(0);
   }

@@ -5,10 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 
+import '../../Controllers/DrawControllers/draw_controller.dart';
 import '../../Theme/app_theme.dart';
 import '../../Utils/common_widgets.dart';
 import '../../Utils/mock_data.dart';
-import '../../Controllers/DrawControllers/draw_controller.dart';
 import '../../controllers/home_controller.dart';
 import '../../controllers/nav_controller.dart';
 import '../scanner/scanner_screen.dart';
@@ -35,41 +35,6 @@ class HomeScreen extends StatelessWidget {
               onSettingsTap: () => Get.to(() => SettingsScreen()),
             ),
 
-            // ── SEARCH BAR ───────────────────────────────────────────────────
-            Container(
-              color: AppColors.headerBackground,
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
-              child: TextField(
-                style: const TextStyle(color: Colors.white),
-                keyboardType: TextInputType.number,
-                onChanged: (val) {
-                  controller.bondNumber.value = val;
-                  _bondInputController.text = val;
-                },
-                decoration: InputDecoration(
-                  hintText: 'Search Prize Bond Numbers...',
-                  hintStyle: const TextStyle(color: Colors.white54),
-                  prefixIcon: const Icon(Icons.search, color: Colors.white54),
-                  suffixIcon: IconButton(
-                    icon: const Icon(Icons.check_circle_outline,
-                        color: Colors.white70),
-                    tooltip: 'Check',
-                    onPressed: controller.checkBond,
-                  ),
-                  filled: true,
-                  fillColor: Colors.white.withOpacity(0.1),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide.none,
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide.none,
-                  ),
-                ),
-              ),
-            ),
-
             // ── SCROLLABLE CONTENT ───────────────────────────────────────────
             Expanded(
               child: SingleChildScrollView(
@@ -83,8 +48,7 @@ class HomeScreen extends StatelessWidget {
                             Expanded(
                               child: StatCard(
                                 label: 'Total Bonds',
-                                value:
-                                    controller.totalBonds.value.toString(),
+                                value: controller.totalBonds.value.toString(),
                                 backgroundColor: const Color(0xFFFFF9C4),
                               ),
                             ),
@@ -117,33 +81,28 @@ class HomeScreen extends StatelessWidget {
                                   padding: const EdgeInsets.symmetric(
                                       horizontal: 16, vertical: 4),
                                   decoration: BoxDecoration(
-                                    border: Border.all(
-                                        color: AppColors.border),
-                                    borderRadius:
-                                        BorderRadius.circular(12),
+                                    border: Border.all(color: AppColors.border),
+                                    borderRadius: BorderRadius.circular(12),
                                   ),
                                   child: DropdownButtonHideUnderline(
                                     child: DropdownButton<int>(
-                                      value: controller
-                                          .selectedDenomination.value,
+                                      value:
+                                          controller.selectedDenomination.value,
                                       isExpanded: true,
                                       icon: const Icon(Icons.expand_more,
                                           color: AppColors.textSecondary),
                                       items: MockData.denominations
                                           .map((d) => DropdownMenuItem(
                                                 value: d,
-                                                child: Text(
-                                                    'Rs. $d Prize Bond',
-                                                    style:
-                                                        AppTextStyles.body),
+                                                child: Text('Rs. $d Prize Bond',
+                                                    style: AppTextStyles.body),
                                               ))
                                           .toList(),
                                       onChanged: (val) {
                                         if (val != null) {
-                                          controller.selectedDenomination
-                                              .value = val;
-                                          draw.hasCheckResult.value =
-                                              false;
+                                          controller
+                                              .selectedDenomination.value = val;
+                                          draw.hasCheckResult.value = false;
                                         }
                                       },
                                     ),
@@ -183,8 +142,7 @@ class HomeScreen extends StatelessWidget {
                                         : const Text('Check Result',
                                             style: TextStyle(
                                                 fontSize: 16,
-                                                fontWeight:
-                                                    FontWeight.w600)),
+                                                fontWeight: FontWeight.w600)),
                                   ),
                                 )),
 
@@ -216,8 +174,7 @@ class HomeScreen extends StatelessWidget {
 
                     Obx(() {
                       if (draw.isLoading.value) {
-                        return const Center(
-                            child: CircularProgressIndicator());
+                        return const Center(child: CircularProgressIndicator());
                       }
                       final latest = draw.draws.take(5).toList();
                       if (latest.isEmpty) {
@@ -294,8 +251,7 @@ class HomeScreen extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
-                    color:
-                        isWinner ? AppColors.winning : AppColors.notWinning,
+                    color: isWinner ? AppColors.winning : AppColors.notWinning,
                   ),
                 ),
                 Text(
@@ -336,8 +292,7 @@ class _DrawResultTile extends StatelessWidget {
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         leading: Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
@@ -352,8 +307,8 @@ class _DrawResultTile extends StatelessWidget {
           '$city · ${DateFormat('yyyy-MM-dd').format(date)}',
           style: AppTextStyles.caption,
         ),
-        trailing: const Icon(Icons.download_outlined,
-            color: AppColors.textSecondary),
+        trailing:
+            const Icon(Icons.download_outlined, color: AppColors.textSecondary),
       ),
     );
   }
