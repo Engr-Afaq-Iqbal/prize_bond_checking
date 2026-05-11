@@ -1,12 +1,19 @@
 // lib/View/scanner/scanner_screen.dart
 //
-// Real camera scanner with ML Kit OCR.
-// The scanner box is now square (QR codes are square) and much larger so
-// the user does not need to hold their phone far from the bond.
+// QR Code Scanner Screen.
+//
+// Flow:
+//   1. Camera opens → automatically scans for QR codes.
+//   2. When a valid 6-digit QR is detected → scanner pauses → result shown.
+//   3. "Scan Again" → resumes scanner.
+//   4. "Use This Number" → passes number back to the previous screen.
+//
+// Uses mobile_scanner package instead of camera + ML Kit OCR.
+// This gives real QR decoding (not OCR guesswork) with instant detection.
 
-import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../Controllers/scanner_controller.dart';
 import '../../Theme/app_theme.dart';
@@ -16,6 +23,8 @@ class ScannerScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Get.put creates the controller — it is disposed automatically when the
+    // screen is popped (because we did NOT use permanent: true here).
     final ScannerController controller = Get.put(ScannerController());
 
     return Scaffold(
@@ -23,59 +32,31 @@ class ScannerScreen extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
-        title: const Text('Scan Bond Number'),
+        title: const Text('Scan Bond QR Code'),
         centerTitle: true,
       ),
       body: Obx(() {
-        // Camera permission denied
-        if (controller.cameraPermissionDenied.value) {
-          return _PermissionDeniedView();
-        }
-
-        // Scan complete → show result screen
+        // Show result screen after successful scan
         if (controller.scanComplete.value) {
           return _ScanResultView(controller: controller);
         }
 
-        // Camera still initializing
-        if (!controller.isCameraReady.value) {
-          return const _LoadingView();
-        }
-
-        // Live camera feed with overlay
+        // Show live camera view
         return _CameraView(controller: controller);
       }),
     );
   }
 }
 
-// ── Loading view (camera initializing) ────────────────────────────────────────
-class _LoadingView extends StatelessWidget {
-  const _LoadingView();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          CircularProgressIndicator(color: Colors.white),
-          SizedBox(height: 16),
-          Text('Initializing camera…',
-              style: TextStyle(color: Colors.white54)),
-        ],
-      ),
-    );
-  }
-}
-
 // ── Live Camera View ───────────────────────────────────────────────────────────
+//
+// Full-screen camera feed with a square scan box overlay.
+// Scanning is fully automatic — no button press needed.
 class _CameraView extends StatelessWidget {
   final ScannerController controller;
   const _CameraView({required this.controller});
 
-  // The scanner box is square — QR codes are always square.
-  // Larger box = user can scan from closer distance (more comfortable).
+  // Square scan box size in logical pixels
   static const double _boxSize = 270.0;
 
   @override
@@ -83,27 +64,35 @@ class _CameraView extends StatelessWidget {
     return Stack(
       fit: StackFit.expand,
       children: [
-        // ── Full-screen camera preview ────────────────────────────────────────
-        CameraPreview(controller.cameraController!),
+        // ── MobileScanner: full-screen camera + auto QR detection ─────────────
+        // errorBuilder handles permission denied / camera errors gracefully.
+        MobileScanner(
+          controller: controller.mobileScannerCtrl,
+          onDetect: controller.onBarcodeDetected,
+          errorBuilder: (context, error, child) {
+            return _CameraErrorView(error: error);
+          },
+        ),
 
-        // ── Dark overlay with transparent square window ───────────────────────
-        // We use ColorFiltered + BlendMode to cut a transparent hole in the
-        // dark overlay, revealing the camera feed in the scan area only.
+        // ── Dark overlay with transparent square cut-out ───────────────────────
+        // ColorFiltered + BlendMode.srcOut "punches a hole" in the dark overlay,
+        // revealing the camera feed only inside the scan box.
         ColorFiltered(
           colorFilter: ColorFilter.mode(
-            Colors.black.withOpacity(0.60),
+            Colors.black.withOpacity(0.62),
             BlendMode.srcOut,
           ),
           child: Stack(
             fit: StackFit.expand,
             children: [
+              // Dark background
               Container(
                 decoration: const BoxDecoration(
                   color: Colors.black,
                   backgroundBlendMode: BlendMode.dstOut,
                 ),
               ),
-              // Transparent square in the center (the scan zone)
+              // The transparent "window" — this becomes the clear scan area
               Center(
                 child: Container(
                   width: _boxSize,
@@ -118,7 +107,7 @@ class _CameraView extends StatelessWidget {
           ),
         ),
 
-        // ── Animated corner brackets (looks better than a full border) ────────
+        // ── Animated corner brackets ──────────────────────────────────────────
         Center(
           child: SizedBox(
             width: _boxSize,
@@ -127,80 +116,50 @@ class _CameraView extends StatelessWidget {
           ),
         ),
 
-        // ── Animated scan line inside the box ────────────────────────────────
+        // ── Animated scan line (sweeps up and down) ───────────────────────────
         Center(
           child: SizedBox(
             width: _boxSize,
             height: _boxSize,
-            child: Obx(() => controller.isScanning.value
-                ? const SizedBox.shrink()
-                : const _ScanLine(boxSize: _boxSize)),
+            child: const _ScanLine(boxSize: _boxSize),
           ),
         ),
 
-        // ── Instruction label below the scan box ──────────────────────────────
+        // ── Instruction labels below the box ──────────────────────────────────
         Positioned(
-          bottom: 160,
+          bottom: 120,
           left: 0,
           right: 0,
           child: Column(
             children: [
               const Text(
-                'Hold your prize bond inside the frame',
+                'Point at prize bond QR code',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: Colors.white,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
               const SizedBox(height: 6),
               Text(
-                'Bond number must be exactly 6 digits',
+                'Scanner detects automatically — no button needed',
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: Colors.white.withOpacity(0.6),
+                  color: Colors.white.withOpacity(0.55),
                   fontSize: 12,
                 ),
               ),
+              const SizedBox(height: 4),
+              Text(
+                'QR must encode exactly 6 digits',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.4),
+                  fontSize: 11,
+                ),
+              ),
             ],
-          ),
-        ),
-
-        // ── Bottom control bar ────────────────────────────────────────────────
-        Align(
-          alignment: Alignment.bottomCenter,
-          child: Container(
-            color: Colors.black,
-            padding: const EdgeInsets.fromLTRB(24, 16, 24, 36),
-            child: Obx(() => SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: controller.isScanning.value
-                        ? null
-                        : controller.captureAndScan,
-                    icon: controller.isScanning.value
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                                color: Colors.white, strokeWidth: 2),
-                          )
-                        : const Icon(Icons.camera),
-                    label: Text(
-                      controller.isScanning.value
-                          ? 'Scanning…'
-                          : 'Capture & Scan',
-                      style: const TextStyle(fontSize: 16),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12)),
-                    ),
-                  ),
-                )),
           ),
         ),
       ],
@@ -208,9 +167,65 @@ class _CameraView extends StatelessWidget {
   }
 }
 
-// ── Animated corner brackets ──────────────────────────────────────────────────
+// ── Camera Error View (permission denied or hardware error) ───────────────────
+class _CameraErrorView extends StatelessWidget {
+  final MobileScannerException error;
+  const _CameraErrorView({required this.error});
+
+  @override
+  Widget build(BuildContext context) {
+    // Determine the message based on error type
+    final bool isPermission =
+        error.errorCode == MobileScannerErrorCode.permissionDenied;
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              isPermission ? Icons.camera_alt_outlined : Icons.error_outline,
+              size: 64,
+              color: Colors.white38,
+            ),
+            const SizedBox(height: 20),
+            Text(
+              isPermission
+                  ? 'Camera Permission Required'
+                  : 'Camera Unavailable',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              isPermission
+                  ? 'Please grant camera access to scan QR codes.\n'
+                      'Go to Settings → App → Camera and enable it.'
+                  : 'Could not open the camera.\n'
+                      'Please restart the app and try again.',
+              style: const TextStyle(color: Colors.white54, fontSize: 13),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 28),
+            ElevatedButton(
+              onPressed: () => Get.back(),
+              child: const Text('Go Back'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Animated Corner Brackets ──────────────────────────────────────────────────
 //
-// L-shaped corners that pulse in and out — a classic modern scanner effect.
+// Four L-shaped corners that gently pulse in opacity — classic scanner effect.
 class _CornerBrackets extends StatefulWidget {
   const _CornerBrackets();
 
@@ -221,18 +236,17 @@ class _CornerBrackets extends StatefulWidget {
 class _CornerBracketsState extends State<_CornerBrackets>
     with SingleTickerProviderStateMixin {
   late AnimationController _animCtrl;
-  late Animation<double> _opacityAnim;
+  late Animation<double> _opacity;
 
   @override
   void initState() {
     super.initState();
-    // Pulse the corners: fade in/out to show the scanner is active
     _animCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 900),
     )..repeat(reverse: true);
 
-    _opacityAnim = Tween<double>(begin: 0.6, end: 1.0).animate(
+    _opacity = Tween<double>(begin: 0.55, end: 1.0).animate(
       CurvedAnimation(parent: _animCtrl, curve: Curves.easeInOut),
     );
   }
@@ -246,9 +260,9 @@ class _CornerBracketsState extends State<_CornerBrackets>
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: _opacityAnim,
+      animation: _opacity,
       builder: (_, __) => Opacity(
-        opacity: _opacityAnim.value,
+        opacity: _opacity.value,
         child: CustomPaint(
           painter: _CornerPainter(color: AppColors.accent),
         ),
@@ -257,7 +271,7 @@ class _CornerBracketsState extends State<_CornerBrackets>
   }
 }
 
-// Draws four L-shaped corners inside the bounding box
+// Draws four L-shaped corners using CustomPainter
 class _CornerPainter extends CustomPainter {
   final Color color;
   const _CornerPainter({required this.color});
@@ -270,33 +284,17 @@ class _CornerPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round
       ..style = PaintingStyle.stroke;
 
-    const cornerLength = 30.0;  // Length of each L arm
-    const radius      = 12.0;   // Corner rounding radius
+    const double armLen = 32.0; // Length of each L arm
+    const double radius = 12.0; // Rounding radius at corner
 
-    // Top-left corner
-    canvas.drawPath(
-      _cornerPath(Offset.zero, size, _Corner.topLeft, cornerLength, radius),
-      paint,
-    );
-    // Top-right corner
-    canvas.drawPath(
-      _cornerPath(Offset.zero, size, _Corner.topRight, cornerLength, radius),
-      paint,
-    );
-    // Bottom-left corner
-    canvas.drawPath(
-      _cornerPath(Offset.zero, size, _Corner.bottomLeft, cornerLength, radius),
-      paint,
-    );
-    // Bottom-right corner
-    canvas.drawPath(
-      _cornerPath(Offset.zero, size, _Corner.bottomRight, cornerLength, radius),
-      paint,
-    );
+    _drawCorner(canvas, paint, size, _Corner.topLeft, armLen, radius);
+    _drawCorner(canvas, paint, size, _Corner.topRight, armLen, radius);
+    _drawCorner(canvas, paint, size, _Corner.bottomLeft, armLen, radius);
+    _drawCorner(canvas, paint, size, _Corner.bottomRight, armLen, radius);
   }
 
-  Path _cornerPath(
-      Offset origin, Size size, _Corner corner, double len, double r) {
+  void _drawCorner(Canvas canvas, Paint paint, Size size, _Corner corner,
+      double len, double r) {
     final path = Path();
     double x, y;
 
@@ -327,7 +325,7 @@ class _CornerPainter extends CustomPainter {
         break;
     }
 
-    return path;
+    canvas.drawPath(path, paint);
   }
 
   @override
@@ -336,9 +334,9 @@ class _CornerPainter extends CustomPainter {
 
 enum _Corner { topLeft, topRight, bottomLeft, bottomRight }
 
-// ── Animated scan line ────────────────────────────────────────────────────────
+// ── Animated Scan Line ────────────────────────────────────────────────────────
 //
-// A horizontal green glow line that sweeps up and down inside the scan box.
+// A glowing horizontal line that sweeps up and down inside the scan box.
 class _ScanLine extends StatefulWidget {
   final double boxSize;
   const _ScanLine({required this.boxSize});
@@ -360,8 +358,7 @@ class _ScanLineState extends State<_ScanLine>
       duration: const Duration(seconds: 2),
     )..repeat(reverse: true);
 
-    // Move line across most of the box height
-    final half = widget.boxSize / 2 - 20;
+    final half = widget.boxSize / 2 - 22;
     _pos = Tween<double>(begin: -half, end: half).animate(
       CurvedAnimation(parent: _anim, curve: Curves.easeInOut),
     );
@@ -381,14 +378,14 @@ class _ScanLineState extends State<_ScanLine>
         offset: Offset(0, _pos.value),
         child: Center(
           child: Container(
-            width: widget.boxSize - 20, // Slightly inset from the box edges
+            width: widget.boxSize - 24,
             height: 2.5,
             decoration: BoxDecoration(
               color: AppColors.accent.withOpacity(0.85),
               borderRadius: BorderRadius.circular(2),
               boxShadow: [
                 BoxShadow(
-                  color: AppColors.accent.withOpacity(0.5),
+                  color: AppColors.accent.withOpacity(0.45),
                   blurRadius: 8,
                   spreadRadius: 3,
                 ),
@@ -402,6 +399,8 @@ class _ScanLineState extends State<_ScanLine>
 }
 
 // ── Scan Result View ──────────────────────────────────────────────────────────
+//
+// Shown after a successful scan. User can retry or use the number.
 class _ScanResultView extends StatelessWidget {
   final ScannerController controller;
   const _ScanResultView({required this.controller});
@@ -411,49 +410,50 @@ class _ScanResultView extends StatelessWidget {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        const Icon(Icons.check_circle, color: AppColors.winning, size: 72),
+        const Icon(Icons.qr_code_scanner, color: AppColors.winning, size: 72),
         const SizedBox(height: 24),
-        const Text('Number Detected!',
-            style: TextStyle(
-                color: Colors.white,
-                fontSize: 20,
-                fontWeight: FontWeight.bold)),
+        const Text(
+          'QR Code Detected!',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
         const SizedBox(height: 12),
 
         // Display the scanned bond number
         Container(
           margin: const EdgeInsets.symmetric(horizontal: 32),
-          padding:
-              const EdgeInsets.symmetric(vertical: 18, horizontal: 24),
+          padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 24),
           decoration: BoxDecoration(
             color: AppColors.winning.withOpacity(0.15),
             borderRadius: BorderRadius.circular(14),
-            border:
-                Border.all(color: AppColors.winning.withOpacity(0.4)),
+            border: Border.all(color: AppColors.winning.withOpacity(0.4)),
           ),
           child: Text(
             controller.scannedNumber.value,
             style: const TextStyle(
               color: Colors.white,
-              fontSize: 34,
+              fontSize: 38,
               fontWeight: FontWeight.bold,
-              letterSpacing: 8,
+              letterSpacing: 10,
             ),
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
         const Text(
           '6-digit prize bond number',
           style: TextStyle(color: Colors.white54, fontSize: 12),
         ),
         const SizedBox(height: 32),
 
-        // Action buttons
+        // Retry / Use buttons
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 32),
           child: Row(
             children: [
-              // Retry: scan again
+              // Scan Again
               Expanded(
                 child: OutlinedButton(
                   onPressed: controller.reset,
@@ -464,12 +464,12 @@ class _ScanResultView extends StatelessWidget {
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12)),
                   ),
-                  child: const Text('Retry'),
+                  child: const Text('Scan Again'),
                 ),
               ),
               const SizedBox(width: 12),
 
-              // Use: return the scanned number to the previous screen
+              // Use this number — return it to the caller
               Expanded(
                 flex: 2,
                 child: ElevatedButton(
@@ -481,54 +481,16 @@ class _ScanResultView extends StatelessWidget {
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12)),
                   ),
-                  child: const Text('Use This Number',
-                      style: TextStyle(fontWeight: FontWeight.w600)),
+                  child: const Text(
+                    'Use This Number',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
                 ),
               ),
             ],
           ),
         ),
       ],
-    );
-  }
-}
-
-// ── Permission Denied View ─────────────────────────────────────────────────────
-class _PermissionDeniedView extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.camera_alt_outlined,
-                size: 64, color: Colors.white38),
-            const SizedBox(height: 20),
-            const Text(
-              'Camera Permission Required',
-              style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              'Please grant camera access to scan prize bond numbers.\n'
-              'Go to Settings → App → Camera and enable it.',
-              style: TextStyle(color: Colors.white54),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: () => Get.back(),
-              child: const Text('Go Back'),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

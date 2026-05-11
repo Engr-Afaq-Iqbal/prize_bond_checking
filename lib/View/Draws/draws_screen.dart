@@ -6,12 +6,15 @@
 //   2. DRAW RESULTS   — all draw results with denomination/city/date filters,
 //                       PDF download, and pull-to-refresh.
 
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
+import 'package:open_filex/open_filex.dart';
 
 import '../../Controllers/DrawControllers/draw_controller.dart';
-import '../../Models/draw_model.dart';
+import '../../models/draw_model.dart';
 import '../../Services/pdf_export_service.dart';
 import '../../Utils/mock_data.dart';
 import 'draw_detail_screen.dart';
@@ -250,7 +253,53 @@ class _DrawScheduleSection extends StatefulWidget {
 }
 
 class _DrawScheduleSectionState extends State<_DrawScheduleSection> {
-  bool _expanded = true; // Expanded by default so professor can see it
+  bool _expanded = true;       // expanded by default
+  bool _generatingPdf = false; // true while PDF is being created
+  String? _pdfPath;            // set once PDF is generated or found on disk
+
+  @override
+  void initState() {
+    super.initState();
+    // Check if a schedule PDF was already downloaded previously
+    _checkExistingPdf();
+  }
+
+  Future<void> _checkExistingPdf() async {
+    final path = await PdfExportService().getSchedulePdfPath();
+    if (File(path).existsSync()) {
+      if (mounted) setState(() => _pdfPath = path);
+    }
+  }
+
+  // Generate the schedule PDF and open it.
+  // Saves to Documents directory so it's available offline later.
+  Future<void> _downloadSchedule() async {
+    setState(() => _generatingPdf = true);
+
+    final path = await PdfExportService().exportScheduleToPdf();
+
+    if (!mounted) return;
+    setState(() {
+      _generatingPdf = false;
+      _pdfPath = path;
+    });
+
+    if (path != null) {
+      await OpenFilex.open(path);
+    } else {
+      Get.snackbar(
+        'Error',
+        'Could not generate schedule PDF. Please try again.',
+        snackPosition: SnackPosition.BOTTOM,
+      );
+    }
+  }
+
+  Future<void> _openSavedPdf() async {
+    if (_pdfPath != null) {
+      await OpenFilex.open(_pdfPath!);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -291,10 +340,19 @@ class _DrawScheduleSectionState extends State<_DrawScheduleSection> {
           ),
         ),
 
-        // ── Schedule cards ──────────────────────────────────────────────────
+        // ── Schedule cards + Download button ────────────────────────────────
         if (_expanded) ...[
           const SizedBox(height: 10),
           ..._scheduleItems().map(_buildScheduleCard).toList(),
+          const SizedBox(height: 10),
+
+          // Download Full Schedule PDF button
+          _DownloadScheduleButton(
+            isGenerating: _generatingPdf,
+            isDownloaded: _pdfPath != null,
+            onDownload: _downloadSchedule,
+            onOpen: _openSavedPdf,
+          ),
         ],
       ],
     );
@@ -492,6 +550,143 @@ class _DrawScheduleSectionState extends State<_DrawScheduleSection> {
 
     // All this year's draws passed — go to next year
     return DateTime(now.year + 1, months.first, day);
+  }
+}
+
+// ── Download Full Schedule Button ──────────────────────────────────────────────
+//
+// Shows:
+//  • "Download Full Schedule" if no PDF exists yet
+//  • Loading spinner while generating
+//  • "Open Saved Schedule" (green) after download — works offline
+class _DownloadScheduleButton extends StatelessWidget {
+  final bool isGenerating;
+  final bool isDownloaded;
+  final VoidCallback onDownload;
+  final VoidCallback onOpen;
+
+  const _DownloadScheduleButton({
+    required this.isGenerating,
+    required this.isDownloaded,
+    required this.onDownload,
+    required this.onOpen,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (isGenerating) {
+      return Container(
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFF1A3C40).withOpacity(0.2)),
+        ),
+        child: const Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Color(0xFF1A3C40),
+              ),
+            ),
+            SizedBox(width: 10),
+            Text(
+              'Generating schedule PDF…',
+              style: TextStyle(fontSize: 13, color: Color(0xFF1A3C40)),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (isDownloaded) {
+      // PDF already saved — show "Open" button with offline badge
+      return GestureDetector(
+        onTap: onOpen,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+          decoration: BoxDecoration(
+            color: Colors.green.shade50,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.green.shade300),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.picture_as_pdf,
+                  color: Colors.red, size: 22),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Open Saved Schedule',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF1A3C40),
+                      ),
+                    ),
+                    Text(
+                      'Works offline — saved on your device',
+                      style: TextStyle(fontSize: 11, color: Colors.grey),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.open_in_new,
+                  size: 16, color: Colors.grey),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Not yet downloaded
+    return GestureDetector(
+      onTap: onDownload,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1A3C40).withOpacity(0.07),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+              color: const Color(0xFF1A3C40).withOpacity(0.25)),
+        ),
+        child: const Row(
+          children: [
+            Icon(Icons.download_outlined,
+                color: Color(0xFF1A3C40), size: 22),
+            SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Download Full Schedule',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF1A3C40),
+                    ),
+                  ),
+                  Text(
+                    'Save as PDF — access anytime without internet',
+                    style: TextStyle(fontSize: 11, color: Colors.grey),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.picture_as_pdf_outlined,
+                size: 16, color: Colors.grey),
+          ],
+        ),
+      ),
+    );
   }
 }
 

@@ -7,7 +7,7 @@ import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 
 import '../../Controllers/DrawControllers/draw_controller.dart';
-import '../../Models/draw_model.dart';
+import '../../models/draw_model.dart';
 
 class DrawDetailScreen extends StatelessWidget {
   final DrawModel draw;

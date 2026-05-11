@@ -12,7 +12,7 @@ import 'package:logger/logger.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 
-import '../../Models/draw_model.dart';
+import '../../models/draw_model.dart';
 import '../../Services/connectivity_service.dart';
 import '../../Services/draw_service.dart';
 import '../../Services/offline_cache_service.dart';

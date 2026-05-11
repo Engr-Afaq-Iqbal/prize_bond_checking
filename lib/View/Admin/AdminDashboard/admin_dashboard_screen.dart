@@ -9,7 +9,7 @@ import 'package:intl/intl.dart';
 import '../../../Admin/AllUsers/all_users.dart';
 import '../../../Controllers/AdminControllers/admin_draw_controller.dart';
 import '../../../Controllers/AuthControllers/auth_controller.dart';
-import '../../../Models/draw_model.dart';
+import '../../../models/draw_model.dart';
 import '../DrawManagement/create_draw_screen.dart';
 
 class AdminDashboardScreen extends StatelessWidget {

@@ -1,177 +1,84 @@
 // lib/Controllers/scanner_controller.dart
-// Real camera scanning with ML Kit OCR text recognition
+//
+// QR Code Scanner Controller using mobile_scanner package.
+//
+// How it works:
+//   1. MobileScannerController (from mobile_scanner package) opens the camera
+//      and automatically scans for QR codes in real time.
+//   2. Every time a QR code is detected, onBarcodeDetected() is called.
+//   3. We validate that the scanned value is EXACTLY 6 digits (Pakistan prize bonds).
+//   4. On valid scan → store the number + pause the scanner.
+//   5. User taps "Use This Number" → result returned to previous screen.
+//   6. User taps "Scan Again" → reset state + resume scanner.
+//
+// NOTE: There is NO fake/random number generation anywhere in this file.
+//       The scanned value comes 100% from the actual QR code.
 
-import 'dart:ui';
-
-import 'package:camera/camera.dart';
 import 'package:get/get.dart';
-import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
-import 'package:logger/logger.dart';
-import 'package:permission_handler/permission_handler.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 
 class ScannerController extends GetxController {
-  final Logger _logger = Logger();
+  // ── mobile_scanner controller ──────────────────────────────────────────────
+  //
+  // DetectionSpeed.noDuplicates → prevents the same QR code from triggering
+  // multiple callbacks in a row (avoids double-processing).
+  final MobileScannerController mobileScannerCtrl = MobileScannerController(
+    detectionSpeed: DetectionSpeed.noDuplicates,
+    facing: CameraFacing.back,
+    torchEnabled: false,
+  );
 
-  final RxBool isScanning = false.obs;
-  final RxString scannedNumber = ''.obs;
-  final RxBool scanComplete = false.obs;
-  final RxBool cameraPermissionDenied = false.obs;
-  final RxBool isCameraReady = false.obs;
-
-  CameraController? cameraController;
-  List<CameraDescription> _cameras = [];
-  final TextRecognizer _textRecognizer =
-      TextRecognizer(script: TextRecognitionScript.latin);
-
-  bool _isProcessingFrame = false;
-
-  @override
-  void onInit() {
-    super.onInit();
-    _initCamera();
-  }
+  // ── Observable state (Obx watches these) ──────────────────────────────────
+  final RxBool scanComplete = false.obs;      // true once a valid QR is found
+  final RxString scannedNumber = ''.obs;      // the 6-digit bond number
 
   @override
   void onClose() {
-    cameraController?.dispose();
-    _textRecognizer.close();
+    // Always dispose the camera controller when leaving the screen
+    mobileScannerCtrl.dispose();
     super.onClose();
   }
 
-  // ── CAMERA INIT ─────────────────────────────────────────────────────────────
+  // ── QR Detection Callback ─────────────────────────────────────────────────
+  //
+  // Called automatically by MobileScanner every time it detects a barcode.
+  // We receive a BarcodeCapture object that may contain multiple barcodes.
+  void onBarcodeDetected(BarcodeCapture capture) {
+    // If we already have a result, ignore new detections
+    if (scanComplete.value) return;
 
-  Future<void> _initCamera() async {
-    final status = await Permission.camera.request();
-    if (!status.isGranted) {
-      cameraPermissionDenied.value = true;
+    // Get the first detected barcode
+    final barcode = capture.barcodes.firstOrNull;
+    if (barcode == null) return;
+
+    // rawValue is the exact string encoded in the QR code
+    final rawValue = barcode.rawValue?.trim() ?? '';
+    if (rawValue.isEmpty) return;
+
+    // ── Validation ────────────────────────────────────────────────────────
+    // Pakistan prize bonds are always EXACTLY 6 digits (e.g. 123456).
+    // We reject anything else to prevent false positives from other QR codes
+    // in the environment (product barcodes, Wi-Fi QR codes, etc.).
+    if (!RegExp(r'^\d{6}$').hasMatch(rawValue)) {
+      // Not a valid bond number — ignore silently (scanner keeps running)
       return;
     }
 
-    _cameras = await availableCameras();
-    if (_cameras.isEmpty) return;
+    // ── Valid bond number found! ───────────────────────────────────────────
+    scannedNumber.value = rawValue;
+    scanComplete.value = true;
 
-    cameraController = CameraController(
-      _cameras.first,
-      ResolutionPreset.high,
-      enableAudio: false,
-      imageFormatGroup: ImageFormatGroup.nv21,
-    );
-
-    await cameraController!.initialize();
-    isCameraReady.value = true;
-
-    // Start real-time OCR frame processing
-    cameraController!.startImageStream(_processFrame);
+    // Pause the scanner — user now sees the result screen
+    mobileScannerCtrl.stop();
   }
 
-  // ── FRAME PROCESSING ─────────────────────────────────────────────────────────
-
-  Future<void> _processFrame(CameraImage image) async {
-    if (_isProcessingFrame || scanComplete.value) return;
-    _isProcessingFrame = true;
-
-    try {
-      final inputImage = _buildInputImage(image);
-      if (inputImage == null) {
-        _isProcessingFrame = false;
-        return;
-      }
-
-      final recognized = await _textRecognizer.processImage(inputImage);
-
-      // Extract bond number: look for a 6-digit sequence
-      final number = _extractBondNumber(recognized.text);
-      if (number != null) {
-        scannedNumber.value = number;
-        scanComplete.value = true;
-        await cameraController?.stopImageStream();
-      }
-    } catch (e) {
-      _logger.e('OCR error: $e');
-    } finally {
-      _isProcessingFrame = false;
-    }
-  }
-
-  InputImage? _buildInputImage(CameraImage image) {
-    if (cameraController == null) return null;
-
-    final camera = _cameras.first;
-    final rotation =
-        InputImageRotationValue.fromRawValue(camera.sensorOrientation);
-    if (rotation == null) return null;
-
-    if (image.planes.isEmpty) return null;
-    final plane = image.planes.first;
-
-    return InputImage.fromBytes(
-      bytes: plane.bytes,
-      metadata: InputImageMetadata(
-        size: Size(image.width.toDouble(), image.height.toDouble()),
-        rotation: rotation,
-        format: InputImageFormat.nv21,
-        bytesPerRow: plane.bytesPerRow,
-      ),
-    );
-  }
-
-  // Extract exactly 6-digit bond number from OCR text.
-  // Pakistan prize bonds are always 6 digits (e.g. 887766).
-  // We reject 7–9 digit matches to avoid false positives from other printed text.
-  String? _extractBondNumber(String text) {
-    final regex = RegExp(r'\b\d{6}\b');
-    final match = regex.firstMatch(text);
-    return match?.group(0);
-  }
-
-  // ── MANUAL SCAN TRIGGER ──────────────────────────────────────────────────────
-
-  // Called when user taps the capture button to force an immediate capture
-  Future<void> captureAndScan() async {
-    if (cameraController == null || !isCameraReady.value) return;
-    isScanning.value = true;
-
-    try {
-      await cameraController!.stopImageStream();
-      final picture = await cameraController!.takePicture();
-      final inputImage = InputImage.fromFilePath(picture.path);
-      final recognized = await _textRecognizer.processImage(inputImage);
-
-      final number = _extractBondNumber(recognized.text);
-      if (number != null) {
-        scannedNumber.value = number;
-        scanComplete.value = true;
-      } else {
-        Get.snackbar(
-          'No Number Found',
-          'Could not detect a bond number. Try again with better lighting.',
-          snackPosition: SnackPosition.BOTTOM,
-        );
-        // Restart stream for next attempt
-        cameraController!.startImageStream(_processFrame);
-      }
-    } catch (e) {
-      _logger.e('Capture error: $e');
-      Get.snackbar('Error', 'Failed to scan. Please try again.',
-          snackPosition: SnackPosition.BOTTOM);
-      cameraController?.startImageStream(_processFrame);
-    } finally {
-      isScanning.value = false;
-    }
-  }
-
-  // ── RESET ────────────────────────────────────────────────────────────────────
-
+  // ── Reset + Resume ────────────────────────────────────────────────────────
+  //
+  // Called when user taps "Scan Again" on the result screen.
   Future<void> reset() async {
     scannedNumber.value = '';
     scanComplete.value = false;
-    isScanning.value = false;
-    _isProcessingFrame = false;
-    // Restart image stream
-    if (cameraController != null && isCameraReady.value) {
-      try {
-        await cameraController!.startImageStream(_processFrame);
-      } catch (_) {}
-    }
+    // Resume the camera and start scanning again
+    await mobileScannerCtrl.start();
   }
 }

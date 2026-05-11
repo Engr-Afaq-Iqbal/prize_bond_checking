@@ -3,15 +3,14 @@
 // This replaces the empty AdminDashboard
 
 import 'dart:io';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:logger/logger.dart';
 
-import '../../Models/draw_model.dart';
+import '../../models/draw_model.dart';
+import '../../Services/cloudinary_service.dart';
 import '../../Services/draw_service.dart';
 import '../../Services/saved_bond_service.dart';
 import '../../Services/offline_cache_service.dart';
@@ -195,22 +194,33 @@ class AdminDrawController extends GetxController {
     }
   }
 
-  // Upload PDF and track progress
+  // Upload PDF to Cloudinary (free storage — no billing required).
+  // Progress is mapped to 10%–70% of the overall progress bar.
   Future<String?> _uploadPdfWithProgress(File pdf, String drawId) async {
     try {
-      final ref = FirebaseStorage.instance.ref('draw_pdfs/$drawId.pdf');
-      final task = ref.putFile(pdf);
+      final cloudinary = CloudinaryService();
+      final url = await cloudinary.uploadPdf(
+        pdf,
+        onProgress: (progress) {
+          // Map 0.0–1.0 Cloudinary progress → 10%–70% overall bar
+          uploadProgress.value = 0.1 + progress * 0.6;
+        },
+      );
 
-      task.snapshotEvents.listen((snapshot) {
-        if (snapshot.totalBytes > 0) {
-          // Map upload progress to 10%-70% of overall progress
-          uploadProgress.value =
-              0.1 + (snapshot.bytesTransferred / snapshot.totalBytes) * 0.6;
-        }
-      });
+      if (url == null) {
+        _logger.e('Cloudinary returned null URL');
+        Get.snackbar(
+          'Upload Failed',
+          'Could not upload PDF. Check your Cloudinary credentials in '
+          'lib/Services/cloudinary_service.dart',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: Colors.orange,
+          colorText: Colors.white,
+          duration: const Duration(seconds: 5),
+        );
+      }
 
-      final snap = await task;
-      return await snap.ref.getDownloadURL();
+      return url;
     } catch (e) {
       _logger.e('PDF upload error: $e');
       return null;

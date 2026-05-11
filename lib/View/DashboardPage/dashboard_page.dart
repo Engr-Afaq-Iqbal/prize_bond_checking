@@ -41,7 +41,7 @@ import 'package:intl/intl.dart';
 
 import '../../Controllers/AuthControllers/auth_controller.dart';
 import '../../Controllers/DrawControllers/draw_controller.dart';
-import '../../Models/draw_model.dart';
+import '../../models/draw_model.dart';
 import '../../Theme/colors.dart';
 import '../../View/Draws/draw_detail_screen.dart';
 import '../../View/Draws/draws_screen.dart';

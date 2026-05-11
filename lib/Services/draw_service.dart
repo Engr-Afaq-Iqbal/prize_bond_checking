@@ -1,16 +1,13 @@
 // lib/Services/draw_service.dart
-// All Firestore + Firebase Storage operations for draw results
-// Used by both Admin (upload) and User (read) controllers
+// Firestore operations for draw results.
+// PDF uploads now go through CloudinaryService (free, no billing needed).
 
-import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:logger/logger.dart';
-import '../Models/draw_model.dart';
+import '../models/draw_model.dart';
 
 class DrawService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final FirebaseStorage _storage = FirebaseStorage.instance;
   final Logger _logger = Logger();
 
   // Firestore collection name
@@ -68,35 +65,6 @@ class DrawService {
 
   // ─── ADMIN: CREATE DRAW ────────────────────────────────────────────────────
 
-  // Upload PDF to Firebase Storage and return download URL
-  Future<String?> uploadPdf(File pdfFile, String drawId) async {
-    try {
-      final ref = _storage.ref('draw_pdfs/$drawId.pdf');
-      final uploadTask = ref.putFile(pdfFile);
-
-      // Track upload progress (caller can listen to this)
-      final snapshot = await uploadTask;
-      final downloadUrl = await snapshot.ref.getDownloadURL();
-
-      _logger.i('PDF uploaded: $downloadUrl');
-      return downloadUrl;
-    } catch (e) {
-      _logger.e('PDF upload error: $e');
-      return null;
-    }
-  }
-
-  // Upload task with progress (for progress bar in admin UI)
-  UploadTask? uploadPdfWithProgress(File pdfFile, String drawId) {
-    try {
-      final ref = _storage.ref('draw_pdfs/$drawId.pdf');
-      return ref.putFile(pdfFile);
-    } catch (e) {
-      _logger.e('Error starting upload: $e');
-      return null;
-    }
-  }
-
   // Create a new draw document in Firestore
   Future<String?> createDraw(DrawModel draw) async {
     try {
@@ -124,14 +92,10 @@ class DrawService {
     }
   }
 
-  // Delete a draw
+  // Delete a draw (Firestore document only).
+  // Note: Cloudinary files are managed from the Cloudinary dashboard.
   Future<bool> deleteDraw(String drawId) async {
     try {
-      // Delete PDF from storage if exists
-      try {
-        await _storage.ref('draw_pdfs/$drawId.pdf').delete();
-      } catch (_) {} // Ignore if no PDF
-
       await _firestore.collection(_collection).doc(drawId).delete();
       _logger.i('Draw deleted: $drawId');
       return true;
