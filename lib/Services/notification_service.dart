@@ -1,137 +1,219 @@
 // lib/Services/notification_service.dart
-// Handles FCM push notifications setup and handling
-// Stores notifications in Firestore for in-app notification history
+//
+// Handles notifications for the Prize Bond app:
+//   • Displaying local notifications (foreground + background + terminated)
+//   • Handling FCM messages when they arrive (future: sent by Firebase Functions)
+//   • Saving FCM token to Firestore (Functions will use it later)
+//   • Storing and reading notification history in Firestore
+//
+// Call order:
+//   1. NotificationService.initLocalNotifications()  ← in main() before runApp
+//   2. FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler)
+//   3. NotificationService().initialize()             ← after user logs in
 
-import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:get/get.dart';
 import 'package:logger/logger.dart';
 
-// Background message handler - must be top-level function (not inside class)
+import '../Config/notification_config.dart';
+
+// ── Background handler — top-level (required by FCM) ─────────────────────────
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  // Handle background notifications silently
-  Logger().i('Background notification: ${message.notification?.title}');
+  await NotificationService.showLocalNotification(
+    title: message.notification?.title ?? 'Prize Bond Update',
+    body: message.notification?.body ?? '',
+    payload: message.data['type'] as String?,
+  );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+
 class NotificationService {
+  static final FlutterLocalNotificationsPlugin _localNotifications =
+      FlutterLocalNotificationsPlugin();
+
   final FirebaseMessaging _messaging = FirebaseMessaging.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final Logger _logger = Logger();
 
-  // ─── INITIALIZATION ────────────────────────────────────────────────────────
-  // Call this once in main.dart after Firebase.initializeApp()
+  static const AndroidNotificationChannel _channel = AndroidNotificationChannel(
+    NotificationConfig.channelId,
+    NotificationConfig.channelName,
+    description: NotificationConfig.channelDesc,
+    importance: Importance.max,
+    playSound: true,
+    enableVibration: true,
+    enableLights: true,
+  );
 
-  Future<void> initialize() async {
-    // Register background handler
-    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+  // ── Static init — call ONCE in main() before runApp ───────────────────────
 
-    // Request permission (iOS requires explicit permission)
-    await _requestPermission();
+  static Future<void> initLocalNotifications() async {
+    const android = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const ios = DarwinInitializationSettings(
+      requestAlertPermission: true,
+      requestBadgePermission: true,
+      requestSoundPermission: true,
+    );
 
-    // Handle foreground notifications
-    _handleForegroundNotifications();
+    await _localNotifications.initialize(
+      const InitializationSettings(android: android, iOS: ios),
+      onDidReceiveNotificationResponse: _onLocalNotificationTap,
+      onDidReceiveBackgroundNotificationResponse: _onLocalNotificationTap,
+    );
 
-    // Handle notification click (app opened from notification)
-    _handleNotificationClick();
-
-    _logger.i('NotificationService initialized');
+    await _localNotifications
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(_channel);
   }
 
-  // ─── REQUEST PERMISSION ────────────────────────────────────────────────────
+  @pragma('vm:entry-point')
+  static void _onLocalNotificationTap(NotificationResponse response) {
+    final payload = response.payload ?? '';
+    if (payload == 'draw_result') {
+      Get.toNamed('/draws');
+    } else if (payload == 'winner') {
+      Get.toNamed('/my-bonds');
+    }
+  }
+
+  // ── Show a local notification ──────────────────────────────────────────────
+
+  static Future<void> showLocalNotification({
+    required String title,
+    required String body,
+    String? payload,
+  }) async {
+    const androidDetails = AndroidNotificationDetails(
+      NotificationConfig.channelId,
+      NotificationConfig.channelName,
+      channelDescription: NotificationConfig.channelDesc,
+      importance: Importance.max,
+      priority: Priority.high,
+      showWhen: true,
+      enableVibration: true,
+      playSound: true,
+      icon: '@mipmap/ic_launcher',
+    );
+    const iosDetails = DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: true,
+      presentSound: true,
+    );
+
+    await _localNotifications.show(
+      DateTime.now().millisecondsSinceEpoch % 100000,
+      title,
+      body,
+      const NotificationDetails(android: androidDetails, iOS: iosDetails),
+      payload: payload,
+    );
+  }
+
+  // ── Instance init — call after user logs in ────────────────────────────────
+
+  Future<void> initialize() async {
+    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+    await _requestPermission();
+    _handleForegroundMessages();
+    _handleNotificationTaps();
+    _logger.i('NotificationService initialized');
+  }
 
   Future<void> _requestPermission() async {
     final settings = await _messaging.requestPermission(
       alert: true,
       badge: true,
       sound: true,
+      provisional: false,
     );
-
     _logger.i('Notification permission: ${settings.authorizationStatus}');
   }
 
-  // ─── GET & SAVE FCM TOKEN ──────────────────────────────────────────────────
-
-  Future<void> saveTokenToFirestore(String userId) async {
-    try {
-      final token = await _messaging.getToken();
-      if (token == null) return;
-
-      await _firestore.collection('customers').doc(userId).update({
-        'fcmToken': token,
-      });
-
-      // Listen for token refresh (token can change)
-      _messaging.onTokenRefresh.listen((newToken) async {
-        await _firestore.collection('customers').doc(userId).update({
-          'fcmToken': newToken,
-        });
-        _logger.i('FCM token refreshed and saved');
-      });
-
-      _logger.i('FCM token saved for user: $userId');
-    } catch (e) {
-      _logger.e('Error saving FCM token: $e');
-    }
-  }
-
-  // ─── FOREGROUND NOTIFICATIONS ──────────────────────────────────────────────
-
-  void _handleForegroundNotifications() {
+  void _handleForegroundMessages() {
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       final notification = message.notification;
       if (notification == null) return;
 
-      // Show in-app snackbar/dialog since app is open
+      showLocalNotification(
+        title: notification.title ?? 'Prize Bond Update',
+        body: notification.body ?? '',
+        payload: message.data['type'] as String?,
+      );
+
       Get.snackbar(
         notification.title ?? 'Prize Bond Update',
         notification.body ?? '',
         snackPosition: SnackPosition.TOP,
         backgroundColor: const Color(0xFF1A3C40),
         colorText: Colors.white,
-        duration: const Duration(seconds: 4),
-        icon: const Icon(Icons.notifications, color: Colors.white),
+        duration: const Duration(seconds: 5),
+        icon: const Icon(Icons.notifications, color: Colors.amber),
+        margin: const EdgeInsets.all(8),
       );
     });
   }
 
-  // ─── NOTIFICATION CLICK HANDLER ────────────────────────────────────────────
-
-  void _handleNotificationClick() {
-    // App opened from terminated state via notification
+  void _handleNotificationTaps() {
     FirebaseMessaging.instance.getInitialMessage().then((message) {
-      if (message != null) {
-        _navigateFromNotification(message.data);
-      }
+      if (message != null) _navigateFromData(message.data);
     });
 
-    // App in background, user taps notification
     FirebaseMessaging.onMessageOpenedApp.listen((message) {
-      _navigateFromNotification(message.data);
+      _navigateFromData(message.data);
     });
   }
 
-  // Navigate user based on notification data payload
-  void _navigateFromNotification(Map<String, dynamic> data) {
-    final type = data['type'];
-    if (type == 'draw_result') {
-      // Navigate to draw details
-      Get.toNamed('/draws');
-    } else if (type == 'winner') {
-      // Navigate to my bonds screen to see the winning bond
-      Get.toNamed('/my-bonds');
+  void _navigateFromData(Map<String, dynamic> data) {
+    switch (data['type']) {
+      case 'draw_result':
+        Get.toNamed('/draws');
+      case 'winner':
+        Get.toNamed('/my-bonds');
     }
   }
 
-  // ─── STORE NOTIFICATION IN FIRESTORE (in-app history) ─────────────────────
+  // ── Save FCM token to Firestore (Firebase Functions will read it later) ────
+
+  Future<void> saveToken(String userId) async {
+    try {
+      final token = await _messaging.getToken();
+      if (token == null) return;
+
+      await _firestore.collection('customers').doc(userId).set(
+        {
+          'fcmToken': token,
+          'fcmTokenUpdatedAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
+
+      _messaging.onTokenRefresh.listen((newToken) async {
+        await _firestore.collection('customers').doc(userId).update({
+          'fcmToken': newToken,
+          'fcmTokenUpdatedAt': FieldValue.serverTimestamp(),
+        });
+      });
+
+      _logger.i('FCM token saved for $userId');
+    } catch (e) {
+      _logger.e('saveToken error: $e');
+    }
+  }
+
+  // ── Firestore notification history ────────────────────────────────────────
 
   Future<void> storeNotification({
     required String userId,
     required String title,
     required String body,
-    required String type, // 'draw_result', 'winner', 'general'
-    String? relatedId,    // Draw ID or bond ID
+    required String type,
+    String? relatedId,
   }) async {
     try {
       await _firestore.collection('notifications').add({
@@ -144,11 +226,10 @@ class NotificationService {
         'createdAt': FieldValue.serverTimestamp(),
       });
     } catch (e) {
-      _logger.e('Error storing notification: $e');
+      _logger.e('storeNotification error: $e');
     }
   }
 
-  // Get user's notification history
   Stream<List<Map<String, dynamic>>> getNotificationsStream(String userId) {
     return _firestore
         .collection('notifications')
@@ -163,7 +244,6 @@ class NotificationService {
             }).toList());
   }
 
-  // Mark notification as read
   Future<void> markAsRead(String notifId) async {
     await _firestore
         .collection('notifications')

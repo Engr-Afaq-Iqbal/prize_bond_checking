@@ -2,13 +2,12 @@
 // Manages user's saved bonds with Firestore sync
 // Requires user to be logged in (auth-gated feature)
 
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:logger/logger.dart';
 
-import '../../Models/saved_bond_model.dart';
+import '../../models/saved_bond_model.dart';
 import '../../Services/saved_bond_service.dart';
 import '../../Services/offline_cache_service.dart';
 import '../../Services/connectivity_service.dart';
@@ -149,15 +148,18 @@ class MyBondsFirebaseController extends GetxController {
 
     isAutoChecking.value = true;
 
-    final winnerIds = await _bondService.autoCheckBondsForDraw(
+    final winners = await _bondService.autoCheckBondsForDraw(
       drawId: drawId,
       denomination: denomination,
       winningNumbers: winningNumbers,
     );
 
+    // Build a set of winning bond IDs for O(1) lookup
+    final winnerBondIds = winners.map((w) => w.bondId).toSet();
+
     // Update local list to reflect winner status
     for (int i = 0; i < savedBonds.length; i++) {
-      if (winnerIds.contains(savedBonds[i].id)) {
+      if (winnerBondIds.contains(savedBonds[i].id)) {
         savedBonds[i].isWinner = true;
         savedBonds[i].winningDrawId = drawId;
       }
@@ -166,10 +168,10 @@ class MyBondsFirebaseController extends GetxController {
 
     isAutoChecking.value = false;
 
-    if (winnerIds.isNotEmpty) {
+    if (winners.isNotEmpty) {
       Get.snackbar(
-        '🎉 You Won!',
-        '${winnerIds.length} of your bonds won in the latest draw!',
+        'You Won!',
+        '${winners.length} of your bonds won in the latest draw!',
         snackPosition: SnackPosition.BOTTOM,
         duration: const Duration(seconds: 4),
         backgroundColor: const Color(0xFF4CAF50),

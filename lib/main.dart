@@ -15,25 +15,26 @@ import 'View/PrizeBondApp/prize_bond_app.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // ── Step 1: Firebase (Auth + Firestore cloud database) ─────────────────────
+  // ── Step 1: Firebase (Auth + Firestore) ────────────────────────────────────
   await Firebase.initializeApp();
 
-  // ── Step 2: GetStorage (simple key-value local storage for bonds/settings) ──
+  // ── Step 2: GetStorage (key-value local storage) ───────────────────────────
   await GetStorage.init();
 
-  // ── Step 3: Hive (offline draw cache) ──────────────────────────────────────
-  // CRITICAL: Must come BEFORE AppController because DrawController reads
-  // from Hive immediately when it is created. If Hive is not open yet,
-  // you get "HiveError: Box not found" crash.
+  // ── Step 3: Hive (offline draw cache) ─────────────────────────────────────
+  // MUST come before AppController because DrawController reads Hive on init.
   await OfflineCacheService.init();
 
-  // ── Step 4: Background push notification handler (must be before runApp) ────
+  // ── Step 4: Local notifications (must be before runApp) ───────────────────
+  await NotificationService.initLocalNotifications();
+
+  // ── Step 5: FCM background handler (must be top-level, before runApp) ──────
   FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
 
-  // ── Step 5: Register all GetX controllers (Hive is ready now) ──────────────
+  // ── Step 6: Register all GetX controllers ─────────────────────────────────
   AppController().initializeController();
 
-  // Lock the app to portrait mode only
+  // Lock to portrait mode
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,

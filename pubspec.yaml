@@ -44,6 +44,9 @@ dependencies:
   # Connectivity
   connectivity_plus: ^6.1.1        # Detect online/offline
 
+  # Local notifications (draw results + winner alerts in all app states)
+  flutter_local_notifications: ^18.0.1
+
   # Logging
   logger: ^2.6.1
 

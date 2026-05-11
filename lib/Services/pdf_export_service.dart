@@ -265,7 +265,7 @@ class PdfExportService {
             pw.SizedBox(height: 14),
             _buildScheduleTable(now),
             pw.SizedBox(height: 20),
-            _buildUpcomingDrawsSection(now),
+            ..._buildUpcomingDrawsSection(now),
             pw.SizedBox(height: 20),
             _buildScheduleFooter(),
           ],
@@ -276,6 +276,9 @@ class PdfExportService {
       final path = await getSchedulePdfPath();
       final file = File(path);
       await file.writeAsBytes(await pdf.save());
+
+      // Open the file automatically after generation (consistent with results export)
+      await _openFile(path);
 
       return path;
     } catch (e) {
@@ -380,51 +383,48 @@ class PdfExportService {
   }
 
   // ── Schedule PDF: upcoming draws (next 6 months) ───────────────────────────
-  pw.Widget _buildUpcomingDrawsSection(DateTime now) {
+  List<pw.Widget> _buildUpcomingDrawsSection(DateTime now) {
     final upcoming = _getUpcomingDraws(now, months: 6);
 
-    return pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.start,
-      children: [
-        pw.Text(
-          'UPCOMING DRAWS Next 6 Months',
-          style: pw.TextStyle(
-            fontSize: 13,
-            fontWeight: pw.FontWeight.bold,
-            color: _primaryColor,
-          ),
+    return [
+      pw.Text(
+        'UPCOMING DRAWS Next 6 Months',
+        style: pw.TextStyle(
+          fontSize: 13,
+          fontWeight: pw.FontWeight.bold,
+          color: _primaryColor,
         ),
-        pw.SizedBox(height: 4),
-        pw.Divider(color: _primaryColor, thickness: 1),
-        pw.SizedBox(height: 8),
-        pw.TableHelper.fromTextArray(
-          headers: ['Date', 'Denomination', 'Frequency'],
-          data: upcoming
-              .map((u) => [
-                    DateFormat('EEE, dd MMM yyyy').format(u.date),
-                    'Rs. ${_formatDenom(u.denomination)}',
-                    u.frequency,
-                  ])
-              .toList(),
-          border: pw.TableBorder.all(color: PdfColors.grey200, width: 0.5),
-          headerStyle: pw.TextStyle(
-            fontWeight: pw.FontWeight.bold,
-            fontSize: 9,
-            color: PdfColors.white,
-          ),
-          headerDecoration: const pw.BoxDecoration(color: _accentColor),
-          cellStyle: const pw.TextStyle(fontSize: 9),
-          rowDecoration: const pw.BoxDecoration(color: PdfColors.white),
-          oddRowDecoration:
-              const pw.BoxDecoration(color: PdfColor.fromInt(0xFFF0F4F3)),
-          columnWidths: {
-            0: const pw.FlexColumnWidth(1.6),
-            1: const pw.FlexColumnWidth(1.1),
-            2: const pw.FlexColumnWidth(1.3),
-          },
+      ),
+      pw.SizedBox(height: 4),
+      pw.Divider(color: _primaryColor, thickness: 1),
+      pw.SizedBox(height: 8),
+      pw.TableHelper.fromTextArray(
+        headers: ['Date', 'Denomination', 'Frequency'],
+        data: upcoming
+            .map((u) => [
+                  DateFormat('EEE, dd MMM yyyy').format(u.date),
+                  'Rs. ${_formatDenom(u.denomination)}',
+                  u.frequency,
+                ])
+            .toList(),
+        border: pw.TableBorder.all(color: PdfColors.grey200, width: 0.5),
+        headerStyle: pw.TextStyle(
+          fontWeight: pw.FontWeight.bold,
+          fontSize: 9,
+          color: PdfColors.white,
         ),
-      ],
-    );
+        headerDecoration: const pw.BoxDecoration(color: _accentColor),
+        cellStyle: const pw.TextStyle(fontSize: 9),
+        rowDecoration: const pw.BoxDecoration(color: PdfColors.white),
+        oddRowDecoration:
+            const pw.BoxDecoration(color: PdfColor.fromInt(0xFFF0F4F3)),
+        columnWidths: {
+          0: const pw.FlexColumnWidth(1.6),
+          1: const pw.FlexColumnWidth(1.1),
+          2: const pw.FlexColumnWidth(1.3),
+        },
+      ),
+    ];
   }
 
   // ── Schedule PDF: footer ───────────────────────────────────────────────────

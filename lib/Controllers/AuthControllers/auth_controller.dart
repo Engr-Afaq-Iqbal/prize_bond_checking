@@ -9,6 +9,7 @@ import 'package:get_storage/get_storage.dart';
 
 import '../../Config/app_config.dart';
 import '../../Controllers/user_controller.dart';
+import '../../Services/notification_service.dart';
 import '../../Utils/storage_sevices.dart';
 import '../../Utils/utils.dart';
 import '../../View/Admin/AdminDashboard/admin_dashboard_screen.dart';
@@ -147,6 +148,11 @@ class AuthController extends GetxController {
         AppStorage.setUserData(userId);
 
         await saveToken(userId);
+
+        // Initialize notification service and save FCM token for future use
+        final notificationService = NotificationService();
+        await notificationService.initialize();
+        await notificationService.saveToken(userId);
 
         // Fetch and cache the user profile. If a DIFFERENT user just logged in
         // their old cached data is wiped and fresh data is loaded from Firestore.

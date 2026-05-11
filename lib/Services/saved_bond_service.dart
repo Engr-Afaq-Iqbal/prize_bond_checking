@@ -1,10 +1,23 @@
 // lib/Services/saved_bond_service.dart
-// Firestore operations for user's saved bonds
-// Also handles auto-check logic when new draw is uploaded
+// Firestore operations for user's saved bonds.
+// Also handles auto-check logic when admin uploads a new draw result.
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:logger/logger.dart';
-import '../Models/saved_bond_model.dart';
+import '../models/saved_bond_model.dart';
+
+// Holds winner info returned from autoCheckBondsForDraw
+class WinnerInfo {
+  final String bondId;
+  final String userId;
+  final String bondNumber;
+
+  const WinnerInfo({
+    required this.bondId,
+    required this.userId,
+    required this.bondNumber,
+  });
+}
 
 class SavedBondService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -14,7 +27,6 @@ class SavedBondService {
 
   // ─── FETCH USER'S BONDS ────────────────────────────────────────────────────
 
-  // Get all saved bonds for a specific user
   Future<List<SavedBondModel>> getUserBonds(String userId) async {
     try {
       final snapshot = await _firestore
@@ -32,7 +44,6 @@ class SavedBondService {
     }
   }
 
-  // Real-time stream of user's bonds (auto-updates UI)
   Stream<List<SavedBondModel>> userBondsStream(String userId) {
     return _firestore
         .collection(_collection)
@@ -48,7 +59,6 @@ class SavedBondService {
 
   Future<bool> saveBond(SavedBondModel bond) async {
     try {
-      // Check for duplicate first
       final existing = await _firestore
           .collection(_collection)
           .where('userId', isEqualTo: bond.userId)
@@ -56,13 +66,10 @@ class SavedBondService {
           .where('denomination', isEqualTo: bond.denomination)
           .get();
 
-      if (existing.docs.isNotEmpty) {
-        return false; // Already saved
-      }
+      if (existing.docs.isNotEmpty) return false; // Already saved
 
       await _firestore.collection(_collection).add(bond.toFirestore());
 
-      // Increment user's savedBondsCount for admin stats
       await _firestore.collection('customers').doc(bond.userId).update({
         'savedBondsCount': FieldValue.increment(1),
       });
@@ -81,7 +88,6 @@ class SavedBondService {
     try {
       await _firestore.collection(_collection).doc(bondId).delete();
 
-      // Decrement counter
       await _firestore.collection('customers').doc(userId).update({
         'savedBondsCount': FieldValue.increment(-1),
       });
@@ -94,35 +100,38 @@ class SavedBondService {
   }
 
   // ─── AUTO-CHECK BONDS ──────────────────────────────────────────────────────
-  // Called after admin uploads new draw results
-  // Checks all user bonds against the new draw's winning numbers
-  // Returns list of bond IDs that won
+  //
+  // Called after admin uploads new draw results.
+  // Returns a list of WinnerInfo for every bond that won, so the caller can
+  // send targeted notifications to each winner's userId / FCM token.
 
-  Future<List<String>> autoCheckBondsForDraw({
+  Future<List<WinnerInfo>> autoCheckBondsForDraw({
     required String drawId,
     required int denomination,
     required List<String> winningNumbers,
   }) async {
-    final List<String> winnerBondIds = [];
+    final List<WinnerInfo> winners = [];
 
     try {
-      // Get all bonds matching this denomination
       final snapshot = await _firestore
           .collection(_collection)
           .where('denomination', isEqualTo: denomination)
           .get();
 
-      // Check each bond
       final batch = _firestore.batch();
 
       for (final doc in snapshot.docs) {
-        final bondNumber = doc.data()['bondNumber'] as String;
+        final data = doc.data();
+        final bondNumber = data['bondNumber'] as String? ?? '';
+        final userId = data['userId'] as String? ?? '';
 
         if (winningNumbers.contains(bondNumber)) {
-          // This bond won!
-          winnerBondIds.add(doc.id);
+          winners.add(WinnerInfo(
+            bondId: doc.id,
+            userId: userId,
+            bondNumber: bondNumber,
+          ));
 
-          // Update bond status in Firestore
           batch.update(doc.reference, {
             'isWinner': true,
             'winningDrawId': drawId,
@@ -130,14 +139,17 @@ class SavedBondService {
         }
       }
 
-      // Commit all updates at once
       await batch.commit();
 
-      _logger.i('Auto-check complete. ${winnerBondIds.length} winners found.');
-      return winnerBondIds;
+      _logger.i(
+        'Auto-check complete: ${winners.length} winner(s) found '
+        'for denomination Rs.$denomination draw $drawId',
+      );
+      return winners;
     } catch (e) {
       _logger.e('Auto-check error: $e');
       return [];
     }
   }
+
 }

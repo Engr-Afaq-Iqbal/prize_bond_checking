@@ -1,8 +1,8 @@
 // lib/Controllers/AdminControllers/admin_draw_controller.dart
-// Admin-only: upload draw results, manage draws, view stats
-// This replaces the empty AdminDashboard
+// Admin-only controller: upload draw results, manage draws, store notifications.
 
 import 'dart:io';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -12,6 +12,7 @@ import 'package:logger/logger.dart';
 import '../../models/draw_model.dart';
 import '../../Services/cloudinary_service.dart';
 import '../../Services/draw_service.dart';
+import '../../Services/notification_service.dart';
 import '../../Services/saved_bond_service.dart';
 import '../../Services/offline_cache_service.dart';
 
@@ -19,6 +20,7 @@ class AdminDrawController extends GetxController {
   final DrawService _drawService = DrawService();
   final SavedBondService _bondService = SavedBondService();
   final OfflineCacheService _cache = OfflineCacheService();
+  final NotificationService _notificationService = NotificationService();
   final Logger _logger = Logger();
 
   // ── Form controllers ───────────────────────────────────────────────────────
@@ -33,6 +35,7 @@ class AdminDrawController extends GetxController {
   final RxBool isLoading = false.obs;
   final RxBool isUploading = false.obs;
   final RxDouble uploadProgress = 0.0.obs;
+  final RxString uploadStatusLabel = ''.obs;
   final Rx<File?> selectedPdf = Rx<File?>(null);
   final RxString pdfName = ''.obs;
 
@@ -93,42 +96,25 @@ class AdminDrawController extends GetxController {
   // ─── CREATE DRAW ───────────────────────────────────────────────────────────
 
   Future<void> createDraw() async {
-    // Validate fields
-    if (drawNumberCtrl.text.trim().isEmpty ||
-        cityCtrl.text.trim().isEmpty ||
-        winningNumbersCtrl.text.trim().isEmpty) {
-      Get.snackbar('Validation Error',
-          'Please fill all required fields (Draw Number, City, Winning Numbers)',
-          snackPosition: SnackPosition.BOTTOM,
-          backgroundColor: Colors.red,
-          colorText: Colors.white);
-      return;
-    }
+    if (!_validateForm()) return;
 
-    // Parse winning numbers (comma-separated)
-    final winningNumbers = winningNumbersCtrl.text
-        .split(',')
-        .map((n) => n.trim())
-        .where((n) => n.isNotEmpty)
-        .toList();
-
-    if (winningNumbers.isEmpty) {
-      Get.snackbar('Error', 'Please enter at least one winning number',
-          snackPosition: SnackPosition.BOTTOM);
-      return;
-    }
+    final winningNumbers = _parseWinningNumbers();
+    if (winningNumbers == null) return;
 
     isUploading.value = true;
     uploadProgress.value = 0;
+    uploadStatusLabel.value = 'Creating draw…';
 
     try {
       final adminUid = FirebaseAuth.instance.currentUser?.uid ?? '';
+      final denomination = selectedDenomination.value;
+      final drawNumber = int.tryParse(drawNumberCtrl.text.trim()) ?? 0;
 
-      // Create a temporary draw (without PDF URL yet)
+      // Step 1 — Create Firestore document
       final newDraw = DrawModel(
         id: '',
-        denomination: selectedDenomination.value,
-        drawNumber: int.tryParse(drawNumberCtrl.text.trim()) ?? 0,
+        denomination: denomination,
+        drawNumber: drawNumber,
         drawDate: selectedDate.value,
         city: cityCtrl.text.trim(),
         winningNumbers: winningNumbers,
@@ -136,83 +122,99 @@ class AdminDrawController extends GetxController {
         uploadedBy: adminUid,
       );
 
-      // Step 1: Create Firestore document (get auto-generated ID)
       final drawId = await _drawService.createDraw(newDraw);
       if (drawId == null) throw Exception('Failed to create draw document');
+      uploadProgress.value = 0.10;
 
-      // Step 2: Upload PDF if selected
+      // Step 2 — Upload PDF to Cloudinary if selected
       if (selectedPdf.value != null) {
-        uploadProgress.value = 0.1;
-        final pdfUrl = await _uploadPdfWithProgress(
-            selectedPdf.value!, drawId);
+        uploadStatusLabel.value = 'Uploading PDF…';
+        final pdfUrl = await _uploadPdfWithProgress(selectedPdf.value!, drawId);
 
         if (pdfUrl != null) {
-          // Save PDF metadata to Firestore: URL, original filename, upload
-          // timestamp, and category so users/admin can identify the file later.
           await _drawService.updateDraw(drawId, {
             'pdfUrl': pdfUrl,
-            'pdfName': pdfName.value,                        // original filename
-            'pdfUploadedAt': DateTime.now().toIso8601String(), // ISO-8601 timestamp
-            'category': 'draw_result',                       // type identifier
+            'pdfName': pdfName.value,
+            'pdfUploadedAt': DateTime.now().toIso8601String(),
+            'category': 'draw_result',
           });
-          uploadProgress.value = 0.8;
         }
       }
+      uploadProgress.value = 0.70;
 
-      // Step 3: Auto-check all user bonds against new draw
-      uploadProgress.value = 0.85;
-      await _bondService.autoCheckBondsForDraw(
+      // Step 3 — Auto-check all user bonds against the new draw
+      uploadStatusLabel.value = 'Checking bonds…';
+      final winners = await _bondService.autoCheckBondsForDraw(
         drawId: drawId,
-        denomination: selectedDenomination.value,
+        denomination: denomination,
         winningNumbers: winningNumbers,
       );
+      uploadProgress.value = 0.80;
 
-      // Step 4: Update cache
-      uploadProgress.value = 0.95;
+      // Step 4 — Store in-app notifications in Firestore for each winner
+      // (Firebase Functions will send push notifications when account is upgraded)
+      uploadStatusLabel.value = 'Storing notifications…';
+      await _storeWinnerNotifications(
+        drawId: drawId,
+        drawNumber: drawNumber,
+        denomination: denomination,
+        winners: winners,
+      );
+      uploadProgress.value = 0.90;
+
+      // Step 5 — Refresh local data and cache
+      uploadStatusLabel.value = 'Finishing up…';
       await loadDraws();
+      await loadStats();
       await _cache.cacheDraws(allDraws.toList());
 
       uploadProgress.value = 1.0;
       isUploading.value = false;
+      uploadStatusLabel.value = '';
 
-      // Success!
-      Get.snackbar('✅ Draw Uploaded!',
-          'Draw results published and users notified.',
-          snackPosition: SnackPosition.BOTTOM,
-          backgroundColor: Colors.green,
-          colorText: Colors.white);
+      Get.snackbar(
+        'Draw Uploaded!',
+        'Draw #$drawNumber published. ${winners.length} winner(s) found.',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+        duration: const Duration(seconds: 4),
+      );
 
       _resetForm();
-      Get.back(); // Close create draw screen
+      Get.back();
     } catch (e) {
-      _logger.e('Create draw error: $e');
+      _logger.e('createDraw error: $e');
       isUploading.value = false;
-      Get.snackbar('Error', 'Failed to upload draw: $e',
-          snackPosition: SnackPosition.BOTTOM,
-          backgroundColor: Colors.red,
-          colorText: Colors.white);
+      uploadStatusLabel.value = '';
+      Get.snackbar(
+        'Upload Failed',
+        e.toString().replaceAll('Exception: ', ''),
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+        duration: const Duration(seconds: 5),
+      );
     }
   }
 
-  // Upload PDF to Cloudinary (free storage — no billing required).
-  // Progress is mapped to 10%–70% of the overall progress bar.
+  // ─── PDF UPLOAD ────────────────────────────────────────────────────────────
+
   Future<String?> _uploadPdfWithProgress(File pdf, String drawId) async {
     try {
       final cloudinary = CloudinaryService();
       final url = await cloudinary.uploadPdf(
         pdf,
         onProgress: (progress) {
-          // Map 0.0–1.0 Cloudinary progress → 10%–70% overall bar
-          uploadProgress.value = 0.1 + progress * 0.6;
+          uploadProgress.value = 0.10 + progress * 0.58;
         },
       );
 
       if (url == null) {
-        _logger.e('Cloudinary returned null URL');
+        _logger.e('Cloudinary returned null URL for draw $drawId');
         Get.snackbar(
-          'Upload Failed',
-          'Could not upload PDF. Check your Cloudinary credentials in '
-          'lib/Services/cloudinary_service.dart',
+          'PDF Upload Failed',
+          'Draw was saved without a PDF. Check Cloudinary credentials.',
           snackPosition: SnackPosition.BOTTOM,
           backgroundColor: Colors.orange,
           colorText: Colors.white,
@@ -222,9 +224,37 @@ class AdminDrawController extends GetxController {
 
       return url;
     } catch (e) {
-      _logger.e('PDF upload error: $e');
+      _logger.e('PDF upload exception: $e');
       return null;
     }
+  }
+
+  // ─── STORE WINNER NOTIFICATIONS IN FIRESTORE ──────────────────────────────
+  // Notifications are stored per-user so users see them in the in-app inbox.
+  // Push delivery will be handled by Firebase Functions once account is upgraded.
+
+  Future<void> _storeWinnerNotifications({
+    required String drawId,
+    required int drawNumber,
+    required int denomination,
+    required List<WinnerInfo> winners,
+  }) async {
+    final seenUserIds = <String>{};
+
+    for (final winner in winners) {
+      await _notificationService.storeNotification(
+        userId: winner.userId,
+        title: 'Congratulations! Your Bond Won!',
+        body:
+            'Bond #${winner.bondNumber} (Rs. $denomination) won in Draw #$drawNumber!',
+        type: 'winner',
+        relatedId: drawId,
+      );
+
+      seenUserIds.add(winner.userId);
+    }
+
+    _logger.i('Stored ${seenUserIds.length} winner notification(s) in Firestore');
   }
 
   // ─── DELETE DRAW ───────────────────────────────────────────────────────────
@@ -233,7 +263,8 @@ class AdminDrawController extends GetxController {
     Get.dialog(AlertDialog(
       title: const Text('Delete Draw'),
       content: Text(
-          'Delete Draw #${draw.drawNumber} (Rs. ${draw.denomination})? This cannot be undone.'),
+        'Delete Draw #${draw.drawNumber} (Rs. ${draw.denomination})? This cannot be undone.',
+      ),
       actions: [
         TextButton(onPressed: () => Get.back(), child: const Text('Cancel')),
         TextButton(
@@ -262,7 +293,40 @@ class AdminDrawController extends GetxController {
     if (picked != null) selectedDate.value = picked;
   }
 
-  // ─── RESET FORM ────────────────────────────────────────────────────────────
+  // ─── HELPERS ───────────────────────────────────────────────────────────────
+
+  bool _validateForm() {
+    if (drawNumberCtrl.text.trim().isEmpty ||
+        cityCtrl.text.trim().isEmpty ||
+        winningNumbersCtrl.text.trim().isEmpty) {
+      Get.snackbar(
+        'Validation Error',
+        'Please fill Draw Number, City, and Winning Numbers',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+      return false;
+    }
+    return true;
+  }
+
+  List<String>? _parseWinningNumbers() {
+    final numbers = winningNumbersCtrl.text
+        .split(',')
+        .map((n) => n.trim())
+        .where((n) => n.isNotEmpty)
+        .toList();
+
+    if (numbers.isEmpty) {
+      Get.snackbar('Validation Error', 'Enter at least one winning number',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: Colors.red,
+          colorText: Colors.white);
+      return null;
+    }
+    return numbers;
+  }
 
   void _resetForm() {
     drawNumberCtrl.clear();
@@ -273,5 +337,6 @@ class AdminDrawController extends GetxController {
     selectedPdf.value = null;
     pdfName.value = '';
     uploadProgress.value = 0;
+    uploadStatusLabel.value = '';
   }
 }
