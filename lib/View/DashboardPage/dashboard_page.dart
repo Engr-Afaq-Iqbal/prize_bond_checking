@@ -407,13 +407,11 @@ class DashboardPage extends StatelessWidget {
           '${draw.city} · ${DateFormat('yyyy-MM-dd').format(draw.drawDate)}',
           style: const TextStyle(color: Colors.grey, fontSize: 12),
         ),
-        trailing: draw.pdfUrl != null
-            ? IconButton(
-                icon: const Icon(Icons.download_outlined,
-                    color: Color(0xFF1A3C40)),
-                onPressed: () => ctrl.downloadPdf(draw),
-              )
-            : null,
+        trailing: IconButton(
+          icon: const Icon(Icons.download_outlined, color: Color(0xFF1A3C40)),
+          onPressed: () => ctrl.downloadPdf(draw),
+          tooltip: 'Generate PDF',
+        ),
       ),
     );
   }

@@ -25,7 +25,7 @@ dependencies:
   firebase_core: ^3.6.0
   firebase_auth: ^5.3.1
   cloud_firestore: ^5.4.4
-  # firebase_storage: ^12.3.2      # Replaced by Cloudinary (free, no billing needed)
+  firebase_storage: ^12.3.7        # Firebase Storage for PDF uploads (Blaze plan)
   firebase_messaging: ^15.1.3      # Push notifications
 
   # Local Database (offline support)
@@ -34,11 +34,9 @@ dependencies:
 
   # PDF & File Handling
   file_picker: ^8.1.2              # Admin picks PDF to upload
-  flutter_pdfview: ^1.3.2          # View PDFs in-app
   path_provider: ^2.1.4            # Get device file paths
-  dio: ^5.7.0                      # Download files with progress
-  open_filex: ^4.5.0               # Open downloaded PDFs
-  pdf: ^3.11.1                     # Generate PDFs from draw results
+  open_filex: ^4.5.0               # Open downloaded/generated PDFs
+  pdf: ^3.11.1                     # Generate PDFs from draw results locally
   printing: ^5.13.1                # Share / save generated PDFs
 
   # Connectivity

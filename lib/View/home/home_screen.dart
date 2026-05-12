@@ -11,6 +11,8 @@ import '../../Utils/common_widgets.dart';
 import '../../Utils/mock_data.dart';
 import '../../controllers/home_controller.dart';
 import '../../controllers/nav_controller.dart';
+import '../../models/draw_model.dart';
+import '../Draws/draw_detail_screen.dart';
 import '../scanner/scanner_screen.dart';
 import '../settings/settings_screen.dart';
 
@@ -183,12 +185,7 @@ class HomeScreen extends StatelessWidget {
                       }
                       return Column(
                         children: latest
-                            .map((d) => _DrawResultTile(
-                                  denomination: d.denomination,
-                                  city: d.city,
-                                  date: d.drawDate,
-                                  drawNumber: d.drawNumber,
-                                ))
+                            .map((d) => _DrawResultTile(draw: d, ctrl: draw))
                             .toList(),
                       );
                     }),
@@ -275,17 +272,10 @@ class HomeScreen extends StatelessWidget {
 
 // ── Draw Result Tile ──────────────────────────────────────────────────────────
 class _DrawResultTile extends StatelessWidget {
-  final int denomination;
-  final String city;
-  final DateTime date;
-  final int drawNumber;
+  final DrawModel draw;
+  final DrawController ctrl;
 
-  const _DrawResultTile({
-    required this.denomination,
-    required this.city,
-    required this.date,
-    required this.drawNumber,
-  });
+  const _DrawResultTile({required this.draw, required this.ctrl});
 
   @override
   Widget build(BuildContext context) {
@@ -293,6 +283,7 @@ class _DrawResultTile extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        onTap: () => Get.to(() => DrawDetailScreen(draw: draw)),
         leading: Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
@@ -301,14 +292,41 @@ class _DrawResultTile extends StatelessWidget {
           ),
           child: const Icon(Icons.emoji_events, color: AppColors.primary),
         ),
-        title: Text('Rs. $denomination Draw #$drawNumber',
+        title: Text('Rs. ${draw.denomination} Draw #${draw.drawNumber}',
             style: AppTextStyles.heading3),
         subtitle: Text(
-          '$city · ${DateFormat('yyyy-MM-dd').format(date)}',
+          '${draw.city} · ${DateFormat('yyyy-MM-dd').format(draw.drawDate)}',
           style: AppTextStyles.caption,
         ),
-        trailing:
-            const Icon(Icons.download_outlined, color: AppColors.textSecondary),
+        trailing: Obx(() {
+          final downloading = ctrl.isDownloading(draw.id);
+          final downloaded = ctrl.isPdfDownloaded(draw.id);
+          final progress = ctrl.downloadProgress[draw.id] ?? 0.0;
+
+          if (downloading) {
+            return SizedBox(
+              width: 36,
+              height: 36,
+              child: Padding(
+                padding: const EdgeInsets.all(8),
+                child: CircularProgressIndicator(
+                  value: progress > 0 ? progress : null,
+                  strokeWidth: 2.5,
+                  color: AppColors.primary,
+                ),
+              ),
+            );
+          }
+
+          return IconButton(
+            icon: Icon(
+              downloaded ? Icons.picture_as_pdf : Icons.download_outlined,
+              color: downloaded ? Colors.red : AppColors.textSecondary,
+            ),
+            tooltip: downloaded ? 'Open PDF' : 'Download / Generate PDF',
+            onPressed: () => ctrl.downloadPdf(draw),
+          );
+        }),
       ),
     );
   }

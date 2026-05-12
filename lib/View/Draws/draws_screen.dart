@@ -954,31 +954,31 @@ class _DrawCard extends StatelessWidget {
                             fontWeight: FontWeight.w600,
                             color: Color(0xFF1A3C40))),
                   ),
-                  if (draw.pdfUrl != null)
-                    Obx(() {
-                      final downloading = ctrl.isDownloading(draw.id);
-                      final downloaded = ctrl.isPdfDownloaded(draw.id);
-                      return IconButton(
-                        icon: downloading
-                            ? SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: Obx(() => CircularProgressIndicator(
-                                      value: ctrl.downloadProgress[draw.id],
-                                      strokeWidth: 2,
-                                    )),
-                              )
-                            : Icon(
-                                downloaded
-                                    ? Icons.picture_as_pdf
-                                    : Icons.download_outlined,
-                                color: downloaded
-                                    ? Colors.red
-                                    : const Color(0xFF1A3C40),
-                              ),
-                        onPressed: () => ctrl.downloadPdf(draw),
-                      );
-                    }),
+                  Obx(() {
+                    final downloading = ctrl.isDownloading(draw.id);
+                    final downloaded = ctrl.isPdfDownloaded(draw.id);
+                    return IconButton(
+                      icon: downloading
+                          ? SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: Obx(() => CircularProgressIndicator(
+                                    value: ctrl.downloadProgress[draw.id],
+                                    strokeWidth: 2,
+                                  )),
+                            )
+                          : Icon(
+                              downloaded
+                                  ? Icons.picture_as_pdf
+                                  : Icons.download_outlined,
+                              color: downloaded
+                                  ? Colors.red
+                                  : const Color(0xFF1A3C40),
+                            ),
+                      onPressed: () => ctrl.downloadPdf(draw),
+                      tooltip: downloaded ? 'Open PDF' : 'Generate PDF',
+                    );
+                  }),
                 ],
               ),
               const SizedBox(height: 10),

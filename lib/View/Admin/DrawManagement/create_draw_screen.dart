@@ -1,65 +1,20 @@
 // lib/View/Admin/DrawManagement/create_draw_screen.dart
 //
 // Admin screen — fill in draw details and optionally attach a PDF.
-//
-// ─────────────────────────────────────────────────────────────────────────────
-// FIREBASE SETUP GUIDE (run once before first use)
-// ─────────────────────────────────────────────────────────────────────────────
-//
-// 1. Enable Firebase Storage
-//    • Open Firebase Console → your project → Build → Storage → Get started
-//    • Choose a storage location (e.g. asia-south1 for Pakistan)
-//    • Click Done
-//
-// 2. Configure Storage Security Rules (allow authenticated uploads)
-//    In the Storage "Rules" tab, replace the default rules with:
-//
-//      rules_version = '2';
-//      service firebase.storage {
-//        match /b/{bucket}/o {
-//          // Anyone can read (download PDFs)
-//          match /{allPaths=**} {
-//            allow read;
-//          }
-//          // Only authenticated users can upload
-//          match /draw_pdfs/{drawId} {
-//            allow write: if request.auth != null;
-//          }
-//        }
-//      }
-//
-// 3. Enable Firestore Database
-//    • Firebase Console → Build → Firestore Database → Create database
-//    • Start in production mode, choose same region as Storage
-//    • Add Firestore Security Rules that allow authenticated reads/writes.
-//
-// 4. How data is saved
-//    When admin taps "Publish Draw Result":
-//      a. A Firestore document is created in the 'draws' collection with fields:
-//           denomination, drawNumber, drawDate, city, winningNumbers, uploadedBy
-//      b. The PDF (if selected) is uploaded to Firebase Storage at:
-//           draw_pdfs/<drawId>.pdf
-//      c. Firestore document is updated with:
-//           pdfUrl        → public download URL
-//           pdfName       → original filename picked by admin
-//           pdfUploadedAt → ISO-8601 upload timestamp
-//           category      → "draw_result"
-//      d. All saved user bonds matching denomination + winningNumbers are marked.
-// ─────────────────────────────────────────────────────────────────────────────
+// The PDF is uploaded to Firebase Storage; all other data goes to Firestore.
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 
 import '../../../Controllers/AdminControllers/admin_draw_controller.dart';
-import '../../../Utils/mock_data.dart'; // for denominations list
+import '../../../Utils/mock_data.dart';
 
 class CreateDrawScreen extends StatelessWidget {
   const CreateDrawScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    // Reuse the existing AdminDrawController (already put in AdminDashboard)
     final AdminDrawController ctrl = Get.find<AdminDrawController>();
 
     return Scaffold(
@@ -79,7 +34,7 @@ class CreateDrawScreen extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: const Color(0xFF1A3C40).withOpacity(0.08),
+                color: const Color(0xFF1A3C40).withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: const Row(
@@ -89,18 +44,15 @@ class CreateDrawScreen extends StatelessWidget {
                   SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      'After upload, users will be notified and their saved bonds will be auto-checked.',
-                      style: TextStyle(
-                          color: Color(0xFF1A3C40), fontSize: 13),
+                      'After publishing, users are notified automatically '
+                      'and their saved bonds are auto-checked.',
+                      style:
+                          TextStyle(color: Color(0xFF1A3C40), fontSize: 13),
                     ),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 12),
-
-            // ── FIREBASE SETUP GUIDE (collapsible) ────────────────────────
-            const _FirebaseSetupGuide(),
             const SizedBox(height: 24),
 
             // ── DENOMINATION ───────────────────────────────────────────────
@@ -134,7 +86,7 @@ class CreateDrawScreen extends StatelessWidget {
             _fieldLabel('Draw Number *'),
             _textField(
               controller: ctrl.drawNumberCtrl,
-              hint: 'e.g., 98',
+              hint: 'e.g. 98',
               keyboardType: TextInputType.number,
             ),
             const SizedBox(height: 16),
@@ -171,7 +123,7 @@ class CreateDrawScreen extends StatelessWidget {
             _fieldLabel('City *'),
             _textField(
               controller: ctrl.cityCtrl,
-              hint: 'e.g., Karachi',
+              hint: 'e.g. Karachi',
             ),
             const SizedBox(height: 16),
 
@@ -183,7 +135,8 @@ class CreateDrawScreen extends StatelessWidget {
               keyboardType: TextInputType.multiline,
               decoration: InputDecoration(
                 hintText:
-                    'e.g., 123456, 789012, 345678\n\nEnter all winning bond numbers separated by commas',
+                    'e.g. 123456, 789012, 345678\n\n'
+                    'Enter all winning bond numbers separated by commas',
                 hintStyle:
                     const TextStyle(color: Colors.grey, fontSize: 12),
                 filled: true,
@@ -209,21 +162,32 @@ class CreateDrawScreen extends StatelessWidget {
                 ? GestureDetector(
                     onTap: ctrl.pickPdf,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 20),
+                      padding: const EdgeInsets.symmetric(vertical: 24),
                       decoration: BoxDecoration(
                         color: Colors.white,
                         border: Border.all(
-                            color: const Color(0xFFE5E7EB),
-                            style: BorderStyle.solid),
+                          color: const Color(0xFFE5E7EB),
+                        ),
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: const Column(
+                      child: Column(
                         children: [
                           Icon(Icons.upload_file,
-                              size: 32, color: Colors.grey),
-                          SizedBox(height: 8),
-                          Text('Tap to select PDF',
-                              style: TextStyle(color: Colors.grey)),
+                              size: 36,
+                              color: Colors.grey.shade400),
+                          const SizedBox(height: 8),
+                          const Text(
+                            'Tap to attach PDF',
+                            style: TextStyle(
+                                color: Colors.grey, fontSize: 14),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Uploaded to Firebase Storage',
+                            style: TextStyle(
+                                color: Colors.grey.shade400,
+                                fontSize: 11),
+                          ),
                         ],
                       ),
                     ),
@@ -233,40 +197,63 @@ class CreateDrawScreen extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: Colors.green.shade50,
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.green.shade200),
+                      border: Border.all(color: Colors.green.shade300),
                     ),
                     child: Row(
                       children: [
                         const Icon(Icons.picture_as_pdf,
-                            color: Colors.red, size: 24),
-                        const SizedBox(width: 10),
+                            color: Colors.red, size: 28),
+                        const SizedBox(width: 12),
                         Expanded(
-                          child: Text(ctrl.pdfName.value,
-                              style: const TextStyle(fontSize: 13)),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                ctrl.pdfName.value,
+                                style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              if (ctrl.pdfSizeLabel.value.isNotEmpty)
+                                Text(
+                                  ctrl.pdfSizeLabel.value,
+                                  style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.grey.shade600),
+                                ),
+                            ],
+                          ),
                         ),
                         IconButton(
-                          icon: const Icon(Icons.close, size: 18),
+                          icon: const Icon(Icons.close,
+                              size: 20, color: Colors.grey),
                           onPressed: ctrl.clearPdf,
+                          tooltip: 'Remove PDF',
                         ),
                       ],
                     ),
                   )),
             const SizedBox(height: 32),
 
-            // ── UPLOAD BUTTON & PROGRESS ───────────────────────────────────
+            // ── PUBLISH BUTTON / PROGRESS ──────────────────────────────────
             Obx(() => ctrl.isUploading.value
                 ? Column(
                     children: [
-                      LinearProgressIndicator(
-                        value: ctrl.uploadProgress.value,
-                        backgroundColor: Colors.grey.shade200,
-                        color: const Color(0xFF1A3C40),
-                        minHeight: 8,
+                      ClipRRect(
                         borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          value: ctrl.uploadProgress.value,
+                          backgroundColor: Colors.grey.shade200,
+                          color: const Color(0xFF1A3C40),
+                          minHeight: 8,
+                        ),
                       ),
                       const SizedBox(height: 10),
                       Text(
-                        _progressLabel(ctrl.uploadProgress.value),
+                        ctrl.uploadStatusLabel.value.isEmpty
+                            ? _progressLabel(ctrl.uploadProgress.value)
+                            : ctrl.uploadStatusLabel.value,
                         style: const TextStyle(
                             color: Colors.grey, fontSize: 13),
                         textAlign: TextAlign.center,
@@ -278,12 +265,15 @@ class CreateDrawScreen extends StatelessWidget {
                     child: ElevatedButton.icon(
                       onPressed: ctrl.createDraw,
                       icon: const Icon(Icons.cloud_upload_outlined),
-                      label: const Text('Publish Draw Result',
-                          style: TextStyle(fontSize: 16)),
+                      label: const Text(
+                        'Publish Draw Result',
+                        style: TextStyle(fontSize: 16),
+                      ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF1A3C40),
                         foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        padding:
+                            const EdgeInsets.symmetric(vertical: 16),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
@@ -297,22 +287,26 @@ class CreateDrawScreen extends StatelessWidget {
     );
   }
 
-  String _progressLabel(double progress) {
-    if (progress < 0.1) return 'Creating draw...';
-    if (progress < 0.7) return 'Uploading PDF... ${(progress * 100).toInt()}%';
-    if (progress < 0.85) return 'Saving to database...';
-    if (progress < 0.95) return 'Auto-checking user bonds...';
-    return 'Finalizing...';
+  String _progressLabel(double p) {
+    if (p < 0.10) return 'Preparing…';
+    if (p < 0.55) return 'Uploading PDF… ${(p * 200).toInt()}%';
+    if (p < 0.70) return 'Saving draw to database…';
+    if (p < 0.85) return 'Auto-checking user bonds…';
+    if (p < 0.99) return 'Finishing up…';
+    return 'Done!';
   }
 
   Widget _fieldLabel(String text) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
-      child: Text(text,
-          style: const TextStyle(
-              fontSize: 13,
-              color: Colors.grey,
-              fontWeight: FontWeight.w500)),
+      child: Text(
+        text,
+        style: const TextStyle(
+          fontSize: 13,
+          color: Colors.grey,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
     );
   }
 
@@ -339,192 +333,6 @@ class CreateDrawScreen extends StatelessWidget {
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       ),
-    );
-  }
-}
-
-// ── Firebase Setup Guide ───────────────────────────────────────────────────────
-//
-// Collapsible card shown to the admin explaining the one-time Firebase
-// configuration needed before the upload feature works.
-class _FirebaseSetupGuide extends StatefulWidget {
-  const _FirebaseSetupGuide();
-
-  @override
-  State<_FirebaseSetupGuide> createState() => _FirebaseSetupGuideState();
-}
-
-class _FirebaseSetupGuideState extends State<_FirebaseSetupGuide> {
-  bool _expanded = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.blue.shade50,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.blue.shade200),
-      ),
-      child: Column(
-        children: [
-          // Header row — tap to expand/collapse
-          InkWell(
-            onTap: () => setState(() => _expanded = !_expanded),
-            borderRadius: BorderRadius.circular(12),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              child: Row(
-                children: [
-                  Icon(Icons.settings_outlined,
-                      color: Colors.blue.shade700, size: 18),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Firebase Setup Guide (tap to expand)',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.blue.shade700,
-                      ),
-                    ),
-                  ),
-                  Icon(
-                    _expanded ? Icons.expand_less : Icons.expand_more,
-                    color: Colors.blue.shade700,
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          // Expandable steps
-          if (_expanded)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
-                  Divider(height: 1),
-                  SizedBox(height: 12),
-                  _SetupStep(
-                    number: '1',
-                    title: 'Enable Firebase Storage',
-                    detail:
-                        'Firebase Console → your project → Build → Storage → '
-                        'Get started → choose region (asia-south1) → Done.',
-                  ),
-                  SizedBox(height: 10),
-                  _SetupStep(
-                    number: '2',
-                    title: 'Set Storage Security Rules',
-                    detail:
-                        'In Storage → Rules tab, allow read for everyone and '
-                        'write only for signed-in users:\n\n'
-                        'match /draw_pdfs/{id} {\n'
-                        '  allow read;\n'
-                        '  allow write: if request.auth != null;\n'
-                        '}',
-                    isCode: true,
-                  ),
-                  SizedBox(height: 10),
-                  _SetupStep(
-                    number: '3',
-                    title: 'Enable Firestore Database',
-                    detail:
-                        'Firebase Console → Build → Firestore Database → '
-                        'Create database → Production mode → same region → Done.',
-                  ),
-                  SizedBox(height: 10),
-                  _SetupStep(
-                    number: '4',
-                    title: 'What gets saved to Firestore',
-                    detail:
-                        'Each uploaded draw stores:\n'
-                        '• pdfUrl — download link\n'
-                        '• pdfName — original filename\n'
-                        '• pdfUploadedAt — timestamp\n'
-                        '• category — "draw_result"',
-                  ),
-                ],
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-// Single numbered step inside the setup guide
-class _SetupStep extends StatelessWidget {
-  final String number;
-  final String title;
-  final String detail;
-  final bool isCode;
-
-  const _SetupStep({
-    required this.number,
-    required this.title,
-    required this.detail,
-    this.isCode = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Step number badge
-        Container(
-          width: 22,
-          height: 22,
-          decoration: BoxDecoration(
-            color: Colors.blue.shade700,
-            shape: BoxShape.circle,
-          ),
-          child: Center(
-            child: Text(
-              number,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title,
-                  style: const TextStyle(
-                      fontSize: 13, fontWeight: FontWeight.w600)),
-              const SizedBox(height: 3),
-              Container(
-                padding: isCode
-                    ? const EdgeInsets.all(8)
-                    : EdgeInsets.zero,
-                decoration: isCode
-                    ? BoxDecoration(
-                        color: Colors.grey.shade100,
-                        borderRadius: BorderRadius.circular(6),
-                      )
-                    : null,
-                child: Text(
-                  detail,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey.shade700,
-                    fontFamily: isCode ? 'monospace' : null,
-                    height: 1.5,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
     );
   }
 }

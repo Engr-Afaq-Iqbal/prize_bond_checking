@@ -15,14 +15,14 @@ class DrawService {
 
   // ─── READ OPERATIONS ────────────────────────────────────────────────────────
 
-  // Fetch latest draws (paginated) - used on Home screen
-  Future<List<DrawModel>> getLatestDraws({int limit = 10}) async {
+  // Fetch draws ordered by date. limit:0 means no cap — returns everything.
+  Future<List<DrawModel>> getLatestDraws({int limit = 0}) async {
     try {
-      final snapshot = await _firestore
+      final base = _firestore
           .collection(_collection)
-          .orderBy('drawDate', descending: true)
-          .limit(limit)
-          .get();
+          .orderBy('drawDate', descending: true);
+
+      final snapshot = await (limit > 0 ? base.limit(limit) : base).get();
 
       return snapshot.docs
           .map((doc) => DrawModel.fromFirestore(doc.data(), doc.id))
